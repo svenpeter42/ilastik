@@ -233,6 +233,7 @@ class OpRegionFeatures3d(Operator):
         # removed before classification.
         extrafeats = dict((k.replace(' ', '') + gui_features_suffix, v)
                           for k, v in extrafeats.iteritems())
+
         return dict(all_features.items() + extrafeats.items())
 
     def propagateDirty(self, slot, subindex, roi):
@@ -390,7 +391,9 @@ class OpAdaptTimeListRoi(Operator):
             stop = taggedShape.values()
             start[timeIndex] = t
             stop[timeIndex] = t + 1
-            result[t] = self.Input(start, stop).wait()
+            #FIXME: why is it wrapped like this?
+            result[t] = self.Input(start, stop).wait()[0, 0]
+
         return result
 
     def propagateDirty(self, slot, subindex, roi):

@@ -215,7 +215,8 @@ def make_feature_array(feats, labels=None):
             index = numpy.nonzero(lab)
             labellist_tmp.append(lab[index])
 
-        for featname, value in featnames:
+        for featname in featnames:
+            value = feats[t][featname]
             ft = numpy.asarray(value.squeeze())
             if labels is not None:
                 ft = ft[index]
