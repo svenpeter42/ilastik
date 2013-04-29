@@ -104,13 +104,14 @@ class ImportLabelDialog(QDialog):
 
 
     def accept(self):
+        QDialog.accept(self)
         result = {}
         for i in range(len(self.images)):
             item = self.ui.tableWidget.item(i, self.Columns.labels)
             if item is None:
                 continue
             result[i] = str(item.text())
-        self.label_images = result
+        self.label_files = result
 
 
     # def dropMimeData(self, row, column, data, action):
@@ -807,11 +808,8 @@ class LabelingGui(LayerViewerGui):
         dlg = ImportLabelDialog(names, parent=self)
         dlg.exec_()
         if dlg.result() == QDialog.Accepted:
-            filedict = dlg.label_files
             op = self.topLevelOperatorView
             slot_name = self._labelingSlots.labelInput
-
-
-            for i, f in dlg.label_images.items():
+            for i, f in dlg.label_files.items():
                 array = vigra.impex.readImage(f)
                 slot[i][:] = array
