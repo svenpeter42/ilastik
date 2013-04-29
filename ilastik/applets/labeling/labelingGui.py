@@ -41,10 +41,10 @@ class Tool():
 
 class ImportLabelDialog(QDialog):
     class Columns(object):
-        unsorted = 0
+        raw = 0
         labels = 1
-        raw = 2
-        names = ['Unsorted', 'Labels', 'Raw Images']
+        unsorted = 2
+        names = ['Raw', 'Labels', 'Unsorted']
 
     def __init__(self, images, parent=None):
         """Parameters:
@@ -80,18 +80,21 @@ class ImportLabelDialog(QDialog):
         table.setHorizontalHeaderLabels(self.Columns.names)
         for i, name in enumerate(self.images):
             item = QTableWidgetItem(name)
+            item.setFlags(item.flags() & ~Qt.ItemIsDragEnabled & ~Qt.ItemIsDropEnabled & ~Qt.ItemIsUserCheckable)
             table.setItem(i, self.Columns.raw, item)
         self.n_unsorted = 0
 
 
     def addFile(self):
+        table = self.ui.tableWidget
         filename = QFileDialog.getOpenFileName(self, "Open Image",
                                                os.path.expanduser("~"),
                                                "Image Files (*.png *.tif *.tiff *.bmp)")
         if self.n_unsorted >= len(self.images):
             table.insertRow(self.n_unsorted)
         item = QTableWidgetItem(filename)
-        self.ui.tableWidget.setItem(self.n_unsorted, self.Columns.unsorted, item)
+        item.setFlags((item.flags() | Qt.ItemIsDragEnabled | Qt.ItemIsDropEnabled) & ~Qt.ItemIsUserCheckable)
+        table.setItem(self.n_unsorted, self.Columns.unsorted, item)
         self.n_unsorted += 1
 
 
@@ -100,22 +103,28 @@ class ImportLabelDialog(QDialog):
         pass
 
 
+    def accept(self):
+        result = {}
+        for i in range(len(self.images)):
+            item = self.ui.tableWidget.item(i, self.Columns.labels)
+            if item is None:
+                continue
+            result[i] = str(item.text())
+        self.label_images = result
+
+
     # def dropMimeData(self, row, column, data, action):
-    #     supported = super().dropMimeData(row, column, data, action)
+    #     supported = super(ImportLabelDialog, self).dropMimeData(row, column, data, action)
     #     if not supported:
     #         return False
     #     # only label images may be dragged around
     #     # TODO: support multiple selection
 
 
-    def accept(self):
-        result = {}
-        for i in range(len(self.images)):
-            item = self.ui.tableWidget.item(i, self.Columns.labels)
-            if item == 0:
-                continue
-            result[i] = str(item.text())
-        self.label_images = result
+    # def dropEvent(self, event):
+    #     target = self.itemAt(event.pos())
+    #     source =
+    #     pass
 
 
 class LabelingGui(LayerViewerGui):
