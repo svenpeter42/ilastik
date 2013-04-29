@@ -81,8 +81,9 @@ class ImportLabelDialog(QDialog):
         table.setHorizontalHeaderLabels(self.Columns.names)
         for i, name in enumerate(self.images):
             item = QTableWidgetItem(name)
-            item.setFlags(item.flags() & ~Qt.ItemIsDragEnabled &
-                          ~Qt.ItemIsDropEnabled & ~Qt.ItemIsUserCheckable)
+            item.setFlags(
+                item.flags() & ~Qt.ItemIsDragEnabled &
+                ~Qt.ItemIsDropEnabled & ~Qt.ItemIsUserCheckable)
             table.setItem(i, self.Columns.raw, item)
         self.n_unassigned = 0
 
@@ -96,8 +97,9 @@ class ImportLabelDialog(QDialog):
         if self.n_unassigned >= len(self.images):
             table.insertRow(self.n_unassigned)
         item = QTableWidgetItem(filename)
-        item.setFlags((item.flags() | Qt.ItemIsDragEnabled |
-                       Qt.ItemIsDropEnabled) & ~Qt.ItemIsUserCheckable)
+        item.setFlags(
+            (item.flags() | Qt.ItemIsDragEnabled |
+             Qt.ItemIsDropEnabled) & ~Qt.ItemIsUserCheckable)
         table.setItem(self.n_unassigned, self.Columns.unassigned, item)
         self.n_unassigned += 1
 
