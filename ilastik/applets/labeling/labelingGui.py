@@ -9,7 +9,9 @@ from functools import partial
 import numpy
 from PyQt4 import uic
 from PyQt4.QtCore import Qt
-from PyQt4.QtGui import QIcon, QColor, QShortcut, QKeySequence
+from PyQt4.QtGui import QIcon, QColor, QShortcut, QKeySequence, QDialog, QTableWidgetItem, QFileDialog
+
+import vigra
 
 # HCI
 from lazyflow.utility import traceLogged
@@ -20,7 +22,7 @@ from ilastik.widgets.labelListView import Label
 from ilastik.widgets.labelListModel import LabelListModel
 
 # ilastik
-from ilastik.utility import bind 
+from ilastik.utility import bind
 from ilastik.utility.gui import ThunkEventHandler, threadRouted
 from ilastik.applets.layerViewer import LayerViewerGui
 
@@ -35,6 +37,86 @@ class Tool():
     Navigation = 0 # Arrow
     Paint      = 1
     Erase      = 2
+
+
+class ImportLabelDialog(QDialog):
+    class Columns(object):
+        unsorted = 0
+        labels = 1
+        raw = 2
+        names = ['Unsorted', 'Labels', 'Raw Images']
+
+    def __init__(self, images, parent=None):
+        """Parameters:
+
+        :param images: a list of the raw images being labeled, in slot
+        order.
+
+        """
+        QDialog.__init__(self, parent)
+
+        self.images = images
+        self.setWindowTitle("Import label images")
+        ui_class, widget_class = uic.loadUiType(os.path.split(__file__)[0] + "/importLabels.ui")
+        self.ui = ui_class()
+        self.ui.setupUi(self)
+        self.ui.buttonBox.accepted.connect(self.accept)
+        self.ui.buttonBox.rejected.connect(self.reject)
+
+        self.ui.addFileButton.pressed.connect(self.addFile)
+        self.ui.addPatternButton.pressed.connect(self.addPattern)
+
+        self.populate()
+
+
+    def populate(self):
+        """make the columns and fill the first with the provided raw
+        images.
+
+        """
+        table = self.ui.tableWidget
+        table.setColumnCount(len(self.Columns.names))
+        table.setRowCount(len(self.images))
+        table.setHorizontalHeaderLabels(self.Columns.names)
+        for i, name in enumerate(self.images):
+            item = QTableWidgetItem(name)
+            table.setItem(i, self.Columns.raw, item)
+        self.n_unsorted = 0
+
+
+    def addFile(self):
+        filename = QFileDialog.getOpenFileName(self, "Open Image",
+                                               os.path.expanduser("~"),
+                                               "Image Files (*.png *.tif *.tiff *.bmp)")
+        if self.n_unsorted >= len(self.images):
+            table.insertRow(self.n_unsorted)
+        item = QTableWidgetItem(filename)
+        self.ui.tableWidget.setItem(self.n_unsorted, self.Columns.unsorted, item)
+        self.n_unsorted += 1
+
+
+    def addPattern(self):
+        # TODO: add directly to 'Labels' column if the paths and number match
+        pass
+
+
+    # def dropMimeData(self, row, column, data, action):
+    #     supported = super().dropMimeData(row, column, data, action)
+    #     if not supported:
+    #         return False
+    #     # only label images may be dragged around
+    #     # TODO: support multiple selection
+
+
+    def accept(self):
+        result = {}
+        for i in range(len(self.images)):
+            item = self.ui.tableWidget.item(i, self.Columns.labels)
+            if item == 0:
+                continue
+            result[i] = str(item.text())
+        self.label_images = result
+
 
 class LabelingGui(LayerViewerGui):
     """
@@ -197,6 +279,8 @@ class LabelingGui(LayerViewerGui):
         _labelControlUi.eraserToolButton.setCheckable(True)
         _labelControlUi.eraserToolButton.clicked.connect( lambda checked: self._handleToolButtonClicked(checked, Tool.Erase) )
 
+        _labelControlUi.importLabelsButton.clicked.connect(self._handleImportLabels)
+
         # This maps tool types to the buttons that enable them
         self.toolButtons = { Tool.Navigation : _labelControlUi.arrowToolButton,
                              Tool.Paint      : _labelControlUi.paintToolButton,
@@ -352,13 +436,13 @@ class LabelingGui(LayerViewerGui):
 
         e = labelsAllowed & (self._labelControlUi.labelListModel.rowCount() > 0)
         self._gui_enableLabeling(e)
-        
+
         if labelsAllowed:
             # Update the applet bar caption
             if toolId == Tool.Navigation:
-                # update GUI 
+                # update GUI
                 self._gui_setNavigation()
-                
+
             elif toolId == Tool.Paint:
                 # If necessary, tell the brushing model to stop erasing
                 if self.editor.brushingModel.erasing:
@@ -366,7 +450,7 @@ class LabelingGui(LayerViewerGui):
                 # Set the brushing size
                 brushSize = self.brushSizes[self.paintBrushSizeIndex]
                 self.editor.brushingModel.setBrushSize(brushSize)
-                # update GUI 
+                # update GUI
                 self._gui_setBrushing()
 
             elif toolId == Tool.Erase:
@@ -376,12 +460,12 @@ class LabelingGui(LayerViewerGui):
                 # Set the brushing size
                 eraserSize = self.brushSizes[self.eraserSizeIndex]
                 self.editor.brushingModel.setBrushSize(eraserSize)
-                # update GUI 
+                # update GUI
                 self._gui_setErasing()
 
         self.editor.setInteractionMode( modeNames[toolId] )
         self._toolId = toolId
-        
+
     def _gui_setErasing(self):
         self._labelControlUi.brushSizeComboBox.setEnabled(True)
         self._labelControlUi.brushSizeCaption.setEnabled(True)
@@ -496,7 +580,7 @@ class LabelingGui(LayerViewerGui):
         self._labelControlUi.labelListModel.select(selectedRow)
 
         self._updateLabelShortcuts()
-       
+
         e = self._labelControlUi.labelListModel.rowCount() > 0
         self._gui_enableLabeling(e)
 
@@ -544,7 +628,7 @@ class LabelingGui(LayerViewerGui):
         Subclasses can override this to respond to changes in the label colors.
         """
         pass
-    
+
     def onPmapColorChanged(self):
         """
         Subclasses can override this to respond to changes in a label associated probability color.
@@ -606,7 +690,7 @@ class LabelingGui(LayerViewerGui):
         #  Otherwise, you can never delete the same label twice in a row.
         #  (Only *changes* to the input are acted upon.)
         self._labelingSlots.labelDelete.setValue(-1)
-       
+
         e =  self._labelControlUi.labelListModel.rowCount() > 0
         self._gui_enableLabeling(e)
 
@@ -705,3 +789,20 @@ class LabelingGui(LayerViewerGui):
         colors.append( QColor(240, 230, 140) ) #khaki
         assert len(colors) == 16
         return [c.rgba() for c in colors]
+
+
+    def _handleImportLabels(self):
+        # get slot of top-level operator
+        slot = self.topLevelOperatorView.viewed_operator().LabelInputs
+        names = list(str(i) for i in range(len(slot)))
+        dlg = ImportLabelDialog(names, parent=self)
+        dlg.exec_()
+        if dlg.result() == QDialog.Accepted:
+            filedict = dlg.label_files
+            op = self.topLevelOperatorView
+            slot_name = self._labelingSlots.labelInput
+
+
+            for i, f in dlg.label_images.items():
+                array = vigra.impex.readImage(f)
+                slot[i][:] = array
