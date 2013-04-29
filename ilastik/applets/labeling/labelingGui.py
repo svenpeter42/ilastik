@@ -43,8 +43,8 @@ class ImportLabelDialog(QDialog):
     class Columns(object):
         raw = 0
         labels = 1
-        unsorted = 2
-        names = ['Raw', 'Labels', 'Unsorted']
+        unassigned = 2
+        names = ['Image', 'Label image', 'Unassigned']
 
     def __init__(self, images, parent=None):
         """Parameters:
@@ -57,7 +57,8 @@ class ImportLabelDialog(QDialog):
 
         self.images = images
         self.setWindowTitle("Import label images")
-        ui_class, widget_class = uic.loadUiType(os.path.split(__file__)[0] + "/importLabels.ui")
+        ui_class, widget_class = uic.loadUiType(
+            os.path.split(__file__)[0] + "/importLabels.ui")
         self.ui = ui_class()
         self.ui.setupUi(self)
         self.ui.buttonBox.accepted.connect(self.accept)
@@ -80,26 +81,30 @@ class ImportLabelDialog(QDialog):
         table.setHorizontalHeaderLabels(self.Columns.names)
         for i, name in enumerate(self.images):
             item = QTableWidgetItem(name)
-            item.setFlags(item.flags() & ~Qt.ItemIsDragEnabled & ~Qt.ItemIsDropEnabled & ~Qt.ItemIsUserCheckable)
+            item.setFlags(item.flags() & ~Qt.ItemIsDragEnabled &
+                          ~Qt.ItemIsDropEnabled & ~Qt.ItemIsUserCheckable)
             table.setItem(i, self.Columns.raw, item)
-        self.n_unsorted = 0
+        self.n_unassigned = 0
 
 
     def addFile(self):
         table = self.ui.tableWidget
-        filename = QFileDialog.getOpenFileName(self, "Open Image",
-                                               os.path.expanduser("~"),
-                                               "Image Files (*.png *.tif *.tiff *.bmp)")
-        if self.n_unsorted >= len(self.images):
-            table.insertRow(self.n_unsorted)
+        filename = QFileDialog.getOpenFileName(
+            self, "Open Image", os.path.expanduser("~"),
+            "Image Files (*.png *.tif *.tiff *.bmp)"
+        )
+        if self.n_unassigned >= len(self.images):
+            table.insertRow(self.n_unassigned)
         item = QTableWidgetItem(filename)
-        item.setFlags((item.flags() | Qt.ItemIsDragEnabled | Qt.ItemIsDropEnabled) & ~Qt.ItemIsUserCheckable)
-        table.setItem(self.n_unsorted, self.Columns.unsorted, item)
-        self.n_unsorted += 1
+        item.setFlags((item.flags() | Qt.ItemIsDragEnabled |
+                       Qt.ItemIsDropEnabled) & ~Qt.ItemIsUserCheckable)
+        table.setItem(self.n_unassigned, self.Columns.unassigned, item)
+        self.n_unassigned += 1
 
 
     def addPattern(self):
-        # TODO: add directly to 'Labels' column if the paths and number match
+        # TODO: option to add directly to 'Labels' column if the paths
+        # and number match
         pass
 
 

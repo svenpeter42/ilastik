@@ -29,16 +29,16 @@
      <item>
       <layout class="QHBoxLayout" name="horizontalLayout_3">
        <item>
-        <widget class="QPushButton" name="addPatternButton">
+        <widget class="QPushButton" name="addFileButton">
          <property name="text">
-          <string>Add by pattern</string>
+          <string>Add file</string>
          </property>
         </widget>
        </item>
        <item>
-        <widget class="QPushButton" name="addFileButton">
+        <widget class="QPushButton" name="addPatternButton">
          <property name="text">
-          <string>Add file</string>
+          <string>Add by pattern</string>
          </property>
         </widget>
        </item>
