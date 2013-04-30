@@ -42,6 +42,11 @@ class Tool():
 
 
 class ImportLabelDialog(QDialog):
+    # TODO: dragging onto existing label needs to move it back to the unassigned list, at the end
+    # TODO: do not create new rows
+    # TODO: illegal drags should not delete item
+    # TODO: select and drag multiple items
+
     class Columns(object):
         labels = 0
         unassigned = 1
@@ -149,11 +154,6 @@ class ImportLabelDialog(QDialog):
                 continue
             result[i] = str(item.text())
         self.label_files = result
-
-    # TODO: dragging onto existing label needs to move it back to the unassigned list, at the end
-    # TODO: do not create new rows
-    # TODO: illegal drags should not delete item
-    # TODO: select and drag multiple items
 
 
 class LabelingGui(LayerViewerGui):
