@@ -9,7 +9,8 @@ from functools import partial
 import numpy
 from PyQt4 import uic
 from PyQt4.QtCore import Qt
-from PyQt4.QtGui import QIcon, QColor, QShortcut, QKeySequence, QDialog, QTableWidgetItem, QFileDialog, QAbstractItemView, QListWidgetItem, QHeaderView
+from PyQt4.QtGui import QIcon, QColor, QShortcut, QKeySequence, QDialog, \
+    QTableWidgetItem, QFileDialog, QAbstractItemView, QListWidgetItem, QHeaderView
 
 import vigra
 
@@ -20,6 +21,7 @@ from volumina.utility import ShortcutManager, PreferencesManager
 from ilastik.shell.gui.iconMgr import ilastikIcons
 from ilastik.widgets.labelListView import Label
 from ilastik.widgets.labelListModel import LabelListModel
+from ilastik.widgets.massFileLoader import MassFileLoader
 
 # ilastik
 from ilastik.utility import bind
@@ -99,11 +101,7 @@ class ImportLabelDialog(QDialog):
         mylist.setDefaultDropAction(Qt.MoveAction)
 
 
-    def addFile(self):
-        filename = QFileDialog.getOpenFileName(
-            self, "Open Image", os.path.expanduser("~"),
-            "Image Files (*.png *.tif *.tiff *.bmp)"
-       )
+    def addToList(self, filename):
         if len(filename) == 0 or not os.path.isfile(str(filename)):
             return
         item = QListWidgetItem(filename)
@@ -113,10 +111,26 @@ class ImportLabelDialog(QDialog):
         self.ui.listWidget.addItem(item)
 
 
+    def addFile(self):
+        filename = QFileDialog.getOpenFileName(
+            self, "Open Image", os.path.expanduser("~"),
+            "Image Files (*.png *.tif *.tiff *.bmp)"
+       )
+        self.addToList(filename)
+
+
     def addPattern(self):
         # TODO: option to add directly to 'Labels' column if the paths
         # and number match
-        pass
+        loader = MassFileLoader()
+        loader.exec_()
+        if loader.result() == QDialog.Accepted:
+            fileNames = [str(s) for s in loader.filenames]
+        else:
+            fileNames = []
+
+        for filename in fileNames:
+            self.addToList(filename)
 
 
     def accept(self):
@@ -129,10 +143,8 @@ class ImportLabelDialog(QDialog):
             result[i] = str(item.text())
         self.label_files = result
 
-    # TODO: dragging out of the unassigned list needs to move every following object up one.
     # TODO: dragging onto existing label needs to move it back to the unassigned list, at the end
-
-    # TODO: dragging to row without raw image should be disallowed
+    # TODO: do not create new rows
     # TODO: illegal drags should not delete item
 
 
