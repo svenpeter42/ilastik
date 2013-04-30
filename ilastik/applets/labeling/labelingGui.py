@@ -43,8 +43,8 @@ class Tool():
 
 class ImportLabelDialog(QDialog):
     # TODO: dragging onto existing label needs to move it back to the unassigned list, at the end
-    # TODO: illegal drags should not delete item
     # TODO: select and drag multiple items
+    # TODO: no duplicates in unassigned file list
 
     class Columns(object):
         labels = 0
@@ -110,7 +110,7 @@ class ImportLabelDialog(QDialog):
         mylist.viewport().setAcceptDrops(True)
         mylist.setDropIndicatorShown(True)
         mylist.setDragDropMode(QAbstractItemView.DragDrop)
-        mylist.setDefaultDropAction(Qt.MoveAction)
+        mylist.setDefaultDropAction(Qt.CopyAction)
 
 
     def addToList(self, filename):
@@ -849,6 +849,8 @@ class LabelingGui(LayerViewerGui):
                     # TODO: ensure labels are legal
                     array = vigra.impex.readImage(f).astype(numpy.uint8)
                     slc = tuple(slice(0, d) for d in array.shape)
+
+                    # FIXME: if array.max() is large (e.g. 255) this takes too long
                     slot[i][slc] = array
                 except:
                     logger.warn('label file {} was not applied to slot {}'.format(f, i))
