@@ -42,7 +42,6 @@ class Tool():
 
 
 class ImportLabelDialog(QDialog):
-    # TODO: dragging onto existing label needs to move it back to the unassigned list, at the end
     # TODO: select and drag multiple items
     # TODO: no duplicates in unassigned file list
 
