@@ -43,7 +43,6 @@ class Tool():
 
 class ImportLabelDialog(QDialog):
     # TODO: dragging onto existing label needs to move it back to the unassigned list, at the end
-    # TODO: do not create new rows
     # TODO: illegal drags should not delete item
     # TODO: select and drag multiple items
 
@@ -73,10 +72,10 @@ class ImportLabelDialog(QDialog):
         self.ui.addFileButton.pressed.connect(self.addFile)
         self.ui.addPatternButton.pressed.connect(self.addPattern)
 
+        self.installEventFilter(self)
 
         self.setupTable()
         self.setupList()
-
 
     def setupTable(self):
         """make and name the columns."""
@@ -94,6 +93,14 @@ class ImportLabelDialog(QDialog):
 
         table.horizontalHeader().hide()
         table.horizontalHeader().setResizeMode(QHeaderView.Stretch)
+
+        def f(index, start, end):
+            if start >= len(self.images):
+                for row in range(start, end + 1):
+                    # TODO: add back to the list
+                    table.removeRow(row)
+
+        table.model().rowsInserted.connect(f)
 
 
     def setupList(self):
