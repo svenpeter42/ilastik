@@ -818,6 +818,10 @@ class LabelingGui(LayerViewerGui):
         if dlg.result() == QDialog.Accepted:
             op = self.topLevelOperatorView
             for i, f in dlg.label_files.items():
-                array = vigra.impex.readImage(f).astype(numpy.uint8)
-                slc = tuple(slice(0, d) for d in array.shape)
-                slot[i][slc] = array
+                try:
+                    # TODO: ensure labels are legal
+                    array = vigra.impex.readImage(f).astype(numpy.uint8)
+                    slc = tuple(slice(0, d) for d in array.shape)
+                    slot[i][slc] = array
+                except:
+                    logger.warn('label file {} was not applied to slot {}'.format(f, i))
