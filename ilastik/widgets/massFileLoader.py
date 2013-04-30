@@ -10,6 +10,8 @@ class MassFileLoader(QDialog):
 
     def __init__(self, parent=None, defaultDirectory=None):
         QDialog.__init__(self, parent)
+        if defaultDirectory is None:
+            defaultDirectory = os.path.expanduser("~")
         self.defaultDirectory = defaultDirectory
         self.setWindowTitle("Mass file loader")
         ui_class, widget_class = uic.loadUiType(os.path.split(__file__)[0] + "/massFileLoader.ui")
