@@ -41,10 +41,9 @@ class Tool():
 
 class ImportLabelDialog(QDialog):
     class Columns(object):
-        raw = 0
-        labels = 1
-        unassigned = 2
-        names = ['Image', 'Label image', 'Unassigned']
+        labels = 0
+        unassigned = 1
+        names = ['Label image', 'Unassigned']
 
     def __init__(self, images, parent=None):
         """Parameters:
@@ -76,20 +75,12 @@ class ImportLabelDialog(QDialog):
 
 
     def populate(self):
-        """make the columns and fill the first with the provided raw
-        images.
-
-        """
+        """make and name the columns."""
         table = self.ui.tableWidget
         table.setColumnCount(len(self.Columns.names))
         table.setRowCount(len(self.images))
         table.setHorizontalHeaderLabels(self.Columns.names)
-        for i, name in enumerate(self.images):
-            item = QTableWidgetItem(name)
-            item.setFlags(
-                item.flags() & ~Qt.ItemIsDragEnabled &
-                ~Qt.ItemIsDropEnabled & ~Qt.ItemIsUserCheckable)
-            table.setItem(i, self.Columns.raw, item)
+        table.setVerticalHeaderLabels(self.images)
         self.n_unassigned = 0
 
 
@@ -132,13 +123,6 @@ class ImportLabelDialog(QDialog):
 
     # TODO: dragging to row without raw image should be disallowed
     # TODO: illegal drags should not delete item
-
-    # def dropMimeData(self, row, column, data, action):
-    #     supported = super(ImportLabelDialog, self).dropMimeData(row, column, data, action)
-    #     if not supported:
-    #         return False
-    #     # only label images may be dragged around
-    #     # TODO: support multiple selection
 
 
 class LabelingGui(LayerViewerGui):
