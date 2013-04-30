@@ -9,7 +9,7 @@ from functools import partial
 import numpy
 from PyQt4 import uic
 from PyQt4.QtCore import Qt
-from PyQt4.QtGui import QIcon, QColor, QShortcut, QKeySequence, QDialog, QTableWidgetItem, QFileDialog, QAbstractItemView
+from PyQt4.QtGui import QIcon, QColor, QShortcut, QKeySequence, QDialog, QTableWidgetItem, QFileDialog, QAbstractItemView, QListWidgetItem, QHeaderView
 
 import vigra
 
@@ -66,40 +66,44 @@ class ImportLabelDialog(QDialog):
         self.ui.addFileButton.pressed.connect(self.addFile)
         self.ui.addPatternButton.pressed.connect(self.addPattern)
 
-        self.ui.tableWidget.setDragEnabled(True)
-        self.ui.tableWidget.viewport().setAcceptDrops(True)
-        self.ui.tableWidget.setDropIndicatorShown(True)
-        self.ui.tableWidget.setDragDropMode(QAbstractItemView.InternalMove)
 
-        self.populate()
+        self.setupTable()
+        self.setupList()
 
 
-    def populate(self):
+    def setupTable(self):
         """make and name the columns."""
         table = self.ui.tableWidget
-        table.setColumnCount(len(self.Columns.names))
+
+        table.setDragEnabled(True)
+        table.viewport().setAcceptDrops(True)
+        table.setDropIndicatorShown(True)
+        table.setDragDropMode(QAbstractItemView.InternalMove)
+
+        table.setColumnCount(1)
         table.setRowCount(len(self.images))
-        table.setHorizontalHeaderLabels(self.Columns.names)
         table.setVerticalHeaderLabels(self.images)
-        self.n_unassigned = 0
+
+        view = table.horizontalHeader()
+        view.setResizeMode(QHeaderView.Stretch)
+
+
+    def setupList(self):
+        mylist = self.ui.listWidget
 
 
     def addFile(self):
-        table = self.ui.tableWidget
         filename = QFileDialog.getOpenFileName(
             self, "Open Image", os.path.expanduser("~"),
             "Image Files (*.png *.tif *.tiff *.bmp)"
         )
         if len(filename) == 0 or not os.path.isfile(str(filename)):
             return
-        if self.n_unassigned >= len(self.images):
-            table.insertRow(self.n_unassigned)
-        item = QTableWidgetItem(filename)
+        item = QListWidgetItem(filename)
         item.setFlags(
             (item.flags() | Qt.ItemIsDragEnabled |
              Qt.ItemIsDropEnabled) & ~Qt.ItemIsUserCheckable)
-        table.setItem(self.n_unassigned, self.Columns.unassigned, item)
-        self.n_unassigned += 1
+        self.ui.listWidget.addItem(item)
 
 
     def addPattern(self):
@@ -112,7 +116,7 @@ class ImportLabelDialog(QDialog):
         QDialog.accept(self)
         result = {}
         for i in range(len(self.images)):
-            item = self.ui.tableWidget.item(i, self.Columns.labels)
+            item = self.ui.tableWidget.item(i, 0)
             if item is None:
                 continue
             result[i] = str(item.text())
