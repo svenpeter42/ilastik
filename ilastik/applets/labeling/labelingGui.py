@@ -111,6 +111,11 @@ class ImportLabelDialog(QDialog):
         self.ui.listWidget.addItem(item)
 
 
+    def addToTable(self, filenames):
+        for i, filename in enumerate(filenames):
+            self.ui.tableWidget.setItem(i, 0, QTableWidgetItem(filename))
+
+
     def addFile(self):
         filename = QFileDialog.getOpenFileName(
             self, "Open Image", os.path.expanduser("~"),
@@ -120,18 +125,20 @@ class ImportLabelDialog(QDialog):
 
 
     def addPattern(self):
-        # TODO: option to add directly to 'Labels' column if the paths
-        # and number match
         loader = MassFileLoader()
         loader.exec_()
         if loader.result() == QDialog.Accepted:
-            fileNames = [str(s) for s in loader.filenames]
+            filenames = [str(s) for s in loader.filenames]
         else:
-            fileNames = []
+            filenames = []
 
-        for filename in fileNames:
+        if self.ui.autoAssignCheckbox.checkState() == Qt.Checked:
+            if len(filenames) == len(self.images):
+                self.addToTable(filenames)
+                return
+
+        for filename in filenames:
             self.addToList(filename)
-
 
     def accept(self):
         QDialog.accept(self)
@@ -146,6 +153,7 @@ class ImportLabelDialog(QDialog):
     # TODO: dragging onto existing label needs to move it back to the unassigned list, at the end
     # TODO: do not create new rows
     # TODO: illegal drags should not delete item
+    # TODO: select and drag multiple items
 
 
 class LabelingGui(LayerViewerGui):
