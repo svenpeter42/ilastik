@@ -9,7 +9,7 @@ from functools import partial
 import numpy
 from PyQt4 import uic
 from PyQt4.QtCore import Qt
-from PyQt4.QtGui import QIcon, QColor, QShortcut, QKeySequence, QDialog, QTableWidgetItem, QFileDialog
+from PyQt4.QtGui import QIcon, QColor, QShortcut, QKeySequence, QDialog, QTableWidgetItem, QFileDialog, QAbstractItemView
 
 import vigra
 
@@ -67,6 +67,11 @@ class ImportLabelDialog(QDialog):
         self.ui.addFileButton.pressed.connect(self.addFile)
         self.ui.addPatternButton.pressed.connect(self.addPattern)
 
+        self.ui.tableWidget.setDragEnabled(True)
+        self.ui.tableWidget.viewport().setAcceptDrops(True)
+        self.ui.tableWidget.setDropIndicatorShown(True)
+        self.ui.tableWidget.setDragDropMode(QAbstractItemView.InternalMove)
+
         self.populate()
 
 
@@ -94,6 +99,8 @@ class ImportLabelDialog(QDialog):
             self, "Open Image", os.path.expanduser("~"),
             "Image Files (*.png *.tif *.tiff *.bmp)"
         )
+        if len(filename) == 0 or not os.path.isfile(str(filename)):
+            return
         if self.n_unassigned >= len(self.images):
             table.insertRow(self.n_unassigned)
         item = QTableWidgetItem(filename)
@@ -120,6 +127,11 @@ class ImportLabelDialog(QDialog):
             result[i] = str(item.text())
         self.label_files = result
 
+    # TODO: dragging out of the unassigned list needs to move every following object up one.
+    # TODO: dragging onto existing label needs to move it back to the unassigned list, at the end
+
+    # TODO: dragging to row without raw image should be disallowed
+    # TODO: illegal drags should not delete item
 
     # def dropMimeData(self, row, column, data, action):
     #     supported = super(ImportLabelDialog, self).dropMimeData(row, column, data, action)
@@ -127,12 +139,6 @@ class ImportLabelDialog(QDialog):
     #         return False
     #     # only label images may be dragged around
     #     # TODO: support multiple selection
-
-
-    # def dropEvent(self, event):
-    #     target = self.itemAt(event.pos())
-    #     source =
-    #     pass
 
 
 class LabelingGui(LayerViewerGui):
