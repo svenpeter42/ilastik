@@ -78,7 +78,8 @@ class ImportLabelDialog(QDialog):
         table.setDragEnabled(True)
         table.viewport().setAcceptDrops(True)
         table.setDropIndicatorShown(True)
-        table.setDragDropMode(QAbstractItemView.InternalMove)
+        table.setDragDropMode(QAbstractItemView.DragDrop)
+        table.setDefaultDropAction(Qt.MoveAction)
 
         table.setColumnCount(1)
         table.setRowCount(len(self.images))
@@ -91,12 +92,18 @@ class ImportLabelDialog(QDialog):
     def setupList(self):
         mylist = self.ui.listWidget
 
+        mylist.setDragEnabled(True)
+        mylist.viewport().setAcceptDrops(True)
+        mylist.setDropIndicatorShown(True)
+        mylist.setDragDropMode(QAbstractItemView.DragDrop)
+        mylist.setDefaultDropAction(Qt.MoveAction)
+
 
     def addFile(self):
         filename = QFileDialog.getOpenFileName(
             self, "Open Image", os.path.expanduser("~"),
             "Image Files (*.png *.tif *.tiff *.bmp)"
-        )
+       )
         if len(filename) == 0 or not os.path.isfile(str(filename)):
             return
         item = QListWidgetItem(filename)
@@ -810,7 +817,7 @@ class LabelingGui(LayerViewerGui):
         dlg.exec_()
         if dlg.result() == QDialog.Accepted:
             op = self.topLevelOperatorView
-            slot_name = self._labelingSlots.labelInput
             for i, f in dlg.label_files.items():
-                array = vigra.impex.readImage(f)
-                slot[i][:] = array
+                array = vigra.impex.readImage(f).astype(numpy.uint8)
+                slc = tuple(slice(0, d) for d in array.shape)
+                slot[i][slc] = array
