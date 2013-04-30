@@ -87,8 +87,8 @@ class ImportLabelDialog(QDialog):
         table.setRowCount(len(self.images))
         table.setVerticalHeaderLabels(self.images)
 
-        view = table.horizontalHeader()
-        view.setResizeMode(QHeaderView.Stretch)
+        table.horizontalHeader().hide()
+        table.horizontalHeader().setResizeMode(QHeaderView.Stretch)
 
 
     def setupList(self):
