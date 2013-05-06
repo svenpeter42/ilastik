@@ -853,3 +853,7 @@ class LabelingGui(LayerViewerGui):
                     slot[i][slc] = array
                 except:
                     logger.warn('label file {} was not applied to slot {}'.format(f, i))
+
+        # TODO: what if labels do not start from 1?
+        # TODO: use name, not lane index, for each lane
+        # TODO: multiple label images per lane (if other ilastik developers agree)
