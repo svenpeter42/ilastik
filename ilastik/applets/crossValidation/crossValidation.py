@@ -29,7 +29,7 @@ def make_folds(labels, n_folds):
     _, labels = np.unique(labels, return_inverse=True)
 
     if n_folds > np.min(np.bincount(labels)):
-        raise Exception('number of folds is greater than instances of a label')
+        raise Exception('at least one label has fewer intances than n_folds')
 
     n_labels = labels.size
     idx = np.argsort(labels)
