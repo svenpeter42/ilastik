@@ -13,7 +13,7 @@ class OpCrossValidation(Operator, MultiLaneOperatorABC):
     PatchLabels = InputSlot(level=1)
     NFolds = InputSlot(stype='int')
 
-    Classifiers = OutputSlot(level=1)
+    Classifiers = OutputSlot()
     Predictions = OutputSlot(level=1)
 
     def __init__(self, *args, **kwargs):
@@ -23,8 +23,13 @@ class OpCrossValidation(Operator, MultiLaneOperatorABC):
     def setupOutputs(self):
         super(OpCrossValidation, self).setupOutputs()
 
-        self.Classifiers.resize(self.NFolds.value)
-        self.Predictions.resize(len(self.PatchFeatures))
+        self.Classifiers.meta.shape = (self.NFolds.value,)
+
+        n = len(self.PatchFeatures)
+        self.Predictions.resize(n)
+
+        for i in range(len(self.Predictions)):
+            self.Predictions[i].meta.shape = (self.PatchLabels[i].meta.shape[0], 2)
 
 
     def execute(self, slot, subindex, roi, result):
@@ -38,20 +43,22 @@ class OpCrossValidation(Operator, MultiLaneOperatorABC):
         n_folds = self.NFolds.value
 
         # FIXME: defect and non-defect images
-        folds = make_folds([0] * len(samples), n_folds)
+        folds = list(make_folds([0] * len(samples), n_folds))
 
         # FIXME: cache output
         classifiers, predictions = train_and_predict(samples, labels, folds)
+
+        # FIXME: predict lazily
 
         if slot is self.Classifiers:
             return classifiers
 
         if slot is self.Predictions:
-            return predictions
+            return predictions[subindex[0]]
 
 
     def propagateDirty(self, slot, subindex, roi):
-        for i in len(self.Classifiers):
+        for i in range(len(self.Classifiers)):
             self.Classifiers[i].setDirty(slice(None))
         for i in range(len(self.Predictions)):
             self.Predictions.setDirty(slice(None))

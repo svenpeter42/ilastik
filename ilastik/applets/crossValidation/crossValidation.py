@@ -70,8 +70,8 @@ def train_and_predict(samples, labels, folds, rf_kwargs=None,
         Prediction labels or probabilities for each image.
 
     """
-    samples = list(np.asarray(s) for s in samples)
-    labels = list(np.asarray(lab).squeeze() for lab in labels)
+    samples = list(np.asarray(s, dtype=np.float32) for s in samples)
+    labels = list(np.asarray(lab, dtype=np.uint32).squeeze() for lab in labels)
 
     for s, lab in zip(samples, labels):
         if s.ndim != 2:
@@ -90,7 +90,8 @@ def train_and_predict(samples, labels, folds, rf_kwargs=None,
 
     for c, (train, test) in zip(classifiers, folds):
         X = np.vstack(list(samples[i] for i in train))
-        Y = np.vstack(list(labels[i] for i in train))
+        Y = np.vstack(list(labels[i] for i in train)).squeeze()
+        Y.resize(Y.shape + (1,))
         c.learnRF(X, Y)
 
         for idx in test:
