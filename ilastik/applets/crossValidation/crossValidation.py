@@ -90,6 +90,7 @@ def train_and_predict(samples, labels, folds, rf_kwargs=None,
                        for _ in range(len(folds)))
     predictions = [None] * len(samples)
 
+    # TODO: train and predict in parallel
     for c, (train, test) in zip(classifiers, folds):
         X = np.vstack(list(samples[i] for i in train))
         Y = np.vstack(list(labels[i] for i in train)).squeeze()

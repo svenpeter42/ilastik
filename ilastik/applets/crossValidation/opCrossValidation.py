@@ -1,6 +1,7 @@
 from crossValidation import make_folds, train_and_predict
 from lazyflow.graph import Operator, InputSlot, OutputSlot
 from ilastik.utility import OperatorSubView, MultiLaneOperatorABC
+from lazyflow.request import RequestLock
 
 import logging
 logger = logging.getLogger(__name__)
@@ -19,6 +20,8 @@ class OpCrossValidation(Operator, MultiLaneOperatorABC):
 
     def __init__(self, *args, **kwargs):
         super(OpCrossValidation, self).__init__(*args, **kwargs)
+        self.resetCaches()
+        self.lock = RequestLock()
 
 
     def setupOutputs(self):
@@ -36,31 +39,38 @@ class OpCrossValidation(Operator, MultiLaneOperatorABC):
 
 
     def execute(self, slot, subindex, roi, result):
-        samples = []
-        labels = []
+        self.lock.acquire()
+        if not self.computed:
+            samples = []
+            labels = []
 
-        for i in range(len(self.PatchFeatures)):
-            samples.append(self.PatchFeatures[i][:].wait())
-            labels.append(self.PatchLabels[i][:].wait())
+            for i in range(len(self.PatchFeatures)):
+                samples.append(self.PatchFeatures[i][:].wait())
+                labels.append(self.PatchLabels[i][:].wait())
 
-        n_folds = self.NFolds.value
+            # FIXME: defect and non-defect images
+            folds = list(make_folds([0] * len(samples), self.NFolds.value))
 
-        # FIXME: defect and non-defect images
-        folds = list(make_folds([0] * len(samples), n_folds))
+            self.classifiers, self.predictions = train_and_predict(samples, labels, folds)
+            self.computed = True
 
-        # FIXME: cache output
-        classifiers, predictions = train_and_predict(samples, labels, folds)
-
-        # FIXME: predict lazily
+        self.lock.release()
 
         if slot is self.Classifiers:
-            return classifiers
+            return self.classifiers
 
         if slot is self.Predictions:
-            return predictions[subindex[0]]
+            return self.predictions[subindex[0]]
+
+
+    def resetCaches(self):
+        self.computed = False
+        self.classifiers = None
+        self.predictions = None
 
 
     def propagateDirty(self, slot, subindex, roi):
+        self.resetCaches()
         for i in range(len(self.Classifiers)):
             self.Classifiers[i].setDirty(slice(None))
         for i in range(len(self.Predictions)):

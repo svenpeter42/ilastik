@@ -46,6 +46,10 @@ class IntegrationTest(unittest.TestCase):
             self.assertTrue(p.ndim == 2)
             self.assertTrue(np.all(np.argmax(p, axis=1) == labels))
 
+        # ensure that nothing gets re-calculated
+        new_classifiers = self.op.Classifiers[:].wait()
+        self.assertIs(new_classifiers, classifiers)
+
 
 if __name__ == '__main__':
     unittest.main()
