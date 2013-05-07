@@ -6,35 +6,12 @@ functions for ease of testing.
 import numpy as np
 
 
-def relabel(labels):
-    """Create new labels out of sets of labels.
-
-    >> relabel([[0, 1], [0, 1], [0, 2]])
-    np.array([0, 0, 1])
-
-    Parameters
-    ----------
-    labels : array-like, [n_samples] or [n_samples, n_labels]
-
-    """
-    labels = np.asarray(labels)
-    if labels.ndim == 1:
-        return labels
-
-    if labels.ndim != 2:
-        raise Exception('label array has too many dimensions')
-
-    label_tuples = list(tuple(row) for row in labels)
-    mapping = dict((t, i) for i, t in enumerate(set(label_tuples)))
-    return np.array(list(mapping[t] for t in label_tuples))
-
-
 def make_folds(labels, n_folds):
     """Make stratified folds.
 
     Parameters
     ----------
-    labels : array-like, [n_samples] or [n_samples, n_labels]
+    labels : array-like, [n_samples]
 
     n_folds : int
         The number of folds.
@@ -45,7 +22,7 @@ def make_folds(labels, n_folds):
         Sample indices in each fold.
 
     """
-    labels = relabel(labels)
+    labels = np.asarray(labels)
 
     # ensure they are contiguous
     _, labels = np.unique(labels, return_inverse=True)
