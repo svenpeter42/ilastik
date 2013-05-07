@@ -19,17 +19,43 @@ class OpCrossValidation(Operator, MultiLaneOperatorABC):
     def __init__(self, *args, **kwargs):
         super(OpCrossValidation, self).__init__(*args, **kwargs)
 
+
     def setupOutputs(self):
         super(OpCrossValidation, self).setupOutputs()
 
         self.Classifiers.resize(self.NFolds.value)
         self.Predictions.resize(len(self.PatchFeatures))
 
+
     def execute(self, slot, subindex, roi, result):
-        pass
+        samples = []
+        labels = []
+
+        for i in range(len(self.PatchFeatures)):
+            samples.append(self.PatchFeatures[i][:].wait())
+            labels.append(self.PatchLabels[i][:].wait())
+
+        n_folds = self.NFolds.value
+
+        # FIXME: defect and non-defect images
+        folds = make_folds([0] * len(samples), n_folds)
+
+        # FIXME: cache output
+        classifiers, predictions = train_and_predict(samples, labels, folds)
+
+        if slot is self.Classifiers:
+            return classifiers
+
+        if slot is self.Predictions:
+            return predictions
+
 
     def propagateDirty(self, slot, subindex, roi):
-        pass
+        for i in len(self.Classifiers):
+            self.Classifiers[i].setDirty(slice(None))
+        for i in range(len(self.Predictions)):
+            self.Predictions.setDirty(slice(None))
+
 
     def addLane(self, laneIndex):
         numLanes = len(self.PatchFeatures)
@@ -38,10 +64,12 @@ class OpCrossValidation(Operator, MultiLaneOperatorABC):
             if slot.level > 0 and len(slot) == laneIndex:
                 slot.resize(numLanes + 1)
 
+
     def removeLane(self, laneIndex, finalLength):
         for slot in self.inputs.values():
             if slot.level > 0 and len(slot) == finalLength + 1:
                 slot.removeSlot(laneIndex, finalLength)
+
 
     def getLane(self, laneIndex):
         return OperatorSubView(self, laneIndex)

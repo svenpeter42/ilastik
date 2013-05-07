@@ -44,7 +44,7 @@ def make_folds(labels, n_folds):
         yield train_index, test_index
 
 
-def train_and_predict(samples, labels, folds, rf_kwargs,
+def train_and_predict(samples, labels, folds, rf_kwargs=None,
                       probabilities=True):
     """Cross-validation on a set of image patches.
 
@@ -80,6 +80,9 @@ def train_and_predict(samples, labels, folds, rf_kwargs,
             raise Exception()
         if s.shape[0] != lab.shape[0]:
             raise Exception()
+
+    if rf_kwargs is None:
+        rf_kwargs = {}
 
     classifiers = list(vigra.learning.RandomForest(**rf_kwargs)
                        for _ in range(len(folds)))
