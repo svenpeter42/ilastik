@@ -12,6 +12,7 @@ class OpCrossValidation(Operator, MultiLaneOperatorABC):
     PatchFeatures = InputSlot(level=1)
     PatchLabels = InputSlot(level=1)
     NFolds = InputSlot(stype='int')
+    NLabels = InputSlot(stype='int')
 
     Classifiers = OutputSlot()
     Predictions = OutputSlot(level=1)
@@ -26,10 +27,12 @@ class OpCrossValidation(Operator, MultiLaneOperatorABC):
         self.Classifiers.meta.shape = (self.NFolds.value,)
 
         n = len(self.PatchFeatures)
-        self.Predictions.resize(n)
+        n_labels = self.NLabels.value
 
+        self.Predictions.resize(n)
         for i in range(len(self.Predictions)):
-            self.Predictions[i].meta.shape = (self.PatchLabels[i].meta.shape[0], 2)
+            self.Predictions[i].meta.shape = (self.PatchLabels[i].meta.shape[0],
+                                              n_labels)
 
 
     def execute(self, slot, subindex, roi, result):

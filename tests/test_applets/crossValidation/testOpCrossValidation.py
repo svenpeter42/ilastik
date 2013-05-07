@@ -24,6 +24,7 @@ class IntegrationTest(unittest.TestCase):
         self.op.addLane(1)
 
         self.op.NFolds.setValue(n_folds)
+        self.op.NLabels.setValue(2)
 
         self.op.PatchFeatures[0].setValue(feats)
         self.op.PatchLabels[0].setValue(labels)
