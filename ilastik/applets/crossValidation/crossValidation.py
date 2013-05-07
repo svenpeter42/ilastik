@@ -23,6 +23,8 @@ def make_folds(labels, n_folds):
         Sample indices in each fold.
 
     """
+    # Roughly based on scikit-learn's stratified cross validator.
+
     labels = np.asarray(labels)
 
     # ensure they are contiguous
