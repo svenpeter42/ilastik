@@ -4,6 +4,7 @@ functions for ease of testing.
 """
 
 import numpy as np
+import vigra
 
 
 def make_folds(labels, n_folds):
@@ -43,44 +44,56 @@ def make_folds(labels, n_folds):
         yield train_index, test_index
 
 
-def train(samples, labels, folds):
-    """Train a set of classifiers.
+def train_and_predict(samples, labels, folds, rf_kwargs,
+                      probabilities=True):
+    """Cross-validation on a set of image patches.
 
     Parameters
     ----------
-    samples : array-like [n_samples, n_features]
+    samples : list of array-like
+        List of patch arrays for each image.
 
-    labels : array-like [n_samples]
+    labels : list of array-like
+        List of label arrays for each image.
 
     folds : nested list
-        The output of make_folds().
-
-    Returns
-    -------
-    predictors : list of vigra random forests
-
-    """
-    pass
-
-
-def predict(samples, probabilities=True, in_fold=None):
-    """Ensures that no sample gets predicted by a classifier that it
-    was used to train.
-
-    Parameters
-    ----------
-    samples : array-like [n_samples, n_features]
+        List of (train, test) index pairs.
 
     probabilities : bool, optional
         Whether to return predictions or probabilities.
 
-    in_fold : array-like, [n_samples], optional
-        in_fold[i] == j if sample i was used to train classifier j;
-        otherwise in_fold[i] = -1.
-
     Returns
     -------
-    predictions: numpy array-like, [n_samples] or [n_samples, n_classes]
+    predictors : collection of vigra random forests
+
+    predictions: list of array-like
+        Prediction labels or probabilities for each image.
 
     """
-    pass
+    samples = list(np.asarray(s) for s in samples)
+    labels = list(np.asarray(lab).squeeze() for lab in labels)
+
+    for s, lab in zip(samples, labels):
+        if s.ndim != 2:
+            raise Exception()
+        if lab.ndim != 1:
+            raise Exception()
+        if s.shape[0] != lab.shape[0]:
+            raise Exception()
+
+    classifiers = list(vigra.learning.RandomForest(**rf_kwargs)
+                       for _ in range(len(folds)))
+    predictions = [None] * len(samples)
+
+    for c, (train, test) in zip(classifiers, folds):
+        X = np.vstack(list(samples[i] for i in train))
+        Y = np.vstack(list(labels[i] for i in train))
+        c.learnRF(X, Y)
+
+        for idx in test:
+            if probabilities:
+                predictions[idx] = c.predictProbabilities(samples[idx])
+            else:
+                predictions[idx] = c.predictLabels(samples[idx])
+
+    return classifiers, predictions
