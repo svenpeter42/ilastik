@@ -1,28 +1,24 @@
 from lazyflow.graph import Graph
 
 from ilastik.workflow import Workflow
-from ilastik.workflows.tracking.manual.manualTrackingWorkflow import ManualTrackingWorkflow
-
+from ilastik.applets.tracking.manual.manualTrackingApplet import ManualTrackingApplet
+from ilastik.applets.objectExtraction.objectExtractionApplet import ObjectExtractionApplet
 
 class TrainableTrackingWorkflow( Workflow ):
-    workflowName = "Tracking (trainable)"
+    workflowName = "Tracking Workflow (trainable)"
 
     @property
-    def applets( self ):
-        return self._manual_wf.applets
-
+    def applets(self):
+        return self._applets
+    
     @property
-    def imageNameListSlot( self ):
-        return self._manual_wf.imageNameListSlot
+    def imageNameListSlot(self):
+        return self.dataSelectionApplet.topLevelOperator.ImageName
 
-    def __init__( self, headless, *args, **kwargs ):
+    def __init__( self, *args, **kwargs ):
         graph = kwargs['graph'] if 'graph' in kwargs else Graph()
         if 'graph' in kwargs: del kwargs['graph']
-        super(TrainableTrackingWorkflow, self).__init__(headless=headless, graph=graph, *args, **kwargs)
-
-        self._manual_wf = ManualTrackingWorkflow( headless, *args, **kwargs )
-
+        super(TrainableTrackingWorkflow, self).__init__(graph=graph, *args, **kwargs)
         
-
     def connectLane( self, laneIndex ):
         self._manual_wf.connectLane( laneIndex )
