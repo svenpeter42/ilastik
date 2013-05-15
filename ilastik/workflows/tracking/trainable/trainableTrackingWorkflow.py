@@ -2,6 +2,7 @@ from lazyflow.graph import Graph
 
 from ilastik.workflow import Workflow
 from ilastik.applets.tracking.manual.manualTrackingApplet import ManualTrackingApplet
+from ilastik.applets.tracking.trainable.trainableTrackingApplet import TrainableTrackingApplet
 from ilastik.applets.objectExtraction.objectExtractionApplet import ObjectExtractionApplet
 
 class TrainableTrackingWorkflow( Workflow ):
