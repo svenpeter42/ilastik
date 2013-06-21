@@ -152,6 +152,11 @@ class CountingGui(LabelingGui):
 
         
         self.initCounting()
+        try:
+            from sitecustomize import debug_trace
+        except:
+            self.labelingDrawerUi.DebugButton.setVisible(False)
+            
 
         
         
