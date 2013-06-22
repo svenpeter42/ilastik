@@ -190,6 +190,7 @@ class QGraphicsResizableRect(QGraphicsRectItem):
         self._selected=False
         self._dbg=False
         self._setupTextItem() 
+        self._isFixed = False
         
         self.resetHandles()
         
@@ -317,7 +318,7 @@ class QGraphicsResizableRect(QGraphicsRectItem):
         for h in self._resizeHandles:
             self.scene().removeItem(h)
         self._resizeHandles=[]
-        if self._hovering or self.isSelected():
+        if not self._isFixed and (self._hovering or self.isSelected()):
             for constrAxes in range(2):
                 h = ResizeHandle((self.height,self.width), constrAxes)
                 h.setParentItem(self)
@@ -410,6 +411,7 @@ class QGraphicsResizableRect(QGraphicsRectItem):
 
     
     def fixSelf(self, isFixed):
+        self._isFixed = isFixed
         self.setFlag(QGraphicsItem.ItemIsMovable,not isFixed)
         #self.setFlag(QGraphicsItem.ItemIsSelectable,True)
         #self.setFlag(QGraphicsItem.ItemSendsGeometryChanges ,True)
