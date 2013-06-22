@@ -67,7 +67,8 @@ class RegressorGurobi(object):
         
         model=gu.Model()
         
-        model.setParam("Threads",2 )
+        #model.setParam("Threads",2 )
+        #model.setParam("BarConvTol", 1E-4)
         #print "creating vars ... ",
         #create the variables
         u_vars1=[model.addVar(name="u^+_%d"%i,lb=0,vtype=gu.GRB.CONTINUOUS) for i in range(X.shape[0])]
@@ -117,6 +118,8 @@ class RegressorGurobi(object):
 
         model.update()
         #model.setParam('OutputFlag', False) 
+        if boxConstraints is not None and len(boxConstraints) > 0:
+            model.setParam("BarConvTol", 1E-4)
         model.optimize()
         
         #self.w=np.array([w.x for w in w_vars]).reshape(-1,1)
@@ -126,7 +129,8 @@ class RegressorGurobi(object):
         self.w=np.array([w.x for w in w_vars]).reshape(-1,1)
 
 
-        if boxConstraints is not None:
+        if boxConstraints is not None and len(boxConstraints) > 0:
+            model.setParam("BarConvTol", 1E-8)
             numConstraintVariables = [features.shape[0] for (value, features) in boxConstraints]
             diffopminus = [model.addVar(name="diff-_%d"%i,lb=0,vtype=gu.GRB.CONTINUOUS) for i in
                             range(len(boxConstraints))]

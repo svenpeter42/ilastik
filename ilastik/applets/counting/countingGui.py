@@ -534,7 +534,7 @@ class CountingGui(LabelingGui):
         for name, slot in slots.items():
             if slot.ready():
                 from volumina import colortables
-                layer = ColortableLayer(LazyflowSource(slot), colorTable = colortables.jet(), normalize = 'auto')
+                layer = ColortableLayer(LazyflowSource(slot), colorTable = colortables.jetTransparent(), normalize = 'auto')
                 layer.name = name
                 layer.visible = self.labelingDrawerUi.liveUpdateButton.isChecked()
                 #layer.visibleChanged.connect(self.updateShowPredictionCheckbox)
