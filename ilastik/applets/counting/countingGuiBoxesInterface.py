@@ -407,6 +407,12 @@ class QGraphicsResizableRect(QGraphicsRectItem):
         self._normalColor.setAlpha(float*255)
         
         self.updateColor()
+
+    
+    def fixSelf(self, isFixed):
+        self.setFlag(QGraphicsItem.ItemIsMovable,not isFixed)
+        #self.setFlag(QGraphicsItem.ItemIsSelectable,True)
+        #self.setFlag(QGraphicsItem.ItemSendsGeometryChanges ,True)
     
 
     
@@ -839,10 +845,9 @@ class BoxController(QObject):
         box.isFixedChanged.connect(self._fixedBoxesChanged)
         
         
-        
-        
         self.boxListModel.insertRow( newRow, box )
         rect.boxLabel=box
+        box.isFixedChanged.connect(rect._rectItem.fixSelf)
         rect._updateTextWhenChanges()
         
         self.currentColor=self._getNextBoxColor()
