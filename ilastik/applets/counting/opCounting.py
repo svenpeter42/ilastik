@@ -13,7 +13,7 @@ from lazyflow.operators import OpBlockedSparseLabelArray, OpValueCache, \
                                OpPrecomputedInput, OpPixelOperator, OpMaxChannelIndicatorOperator, \
                                Op5ifyer
                                
-from ilastik.applets.counting.countingOperators import OpTrainCounter, OpPredictCounter
+from ilastik.applets.counting.countingOperators import OpTrainCounter, OpPredictCounter, OpLabelPreviewer
 
 #ilastik
 
@@ -102,6 +102,7 @@ class OpCounting( Operator ):
     LabelColors = OutputSlot()
     PmapColors = OutputSlot()
     Density = OutputSlot(level=1)
+    LabelPreview = OutputSlot(level=1)
     OutputSum = OutputSlot(level=1)
 
     def __init__( self, *args, **kwargs ):
@@ -149,6 +150,9 @@ class OpCounting( Operator ):
         self.classifier_cache = OpValueCache( parent=self, graph=self.graph )
         self.classifier_cache.inputs["Input"].connect(self.opTrain.outputs['Classifier'])
         self.Classifier.connect( self.classifier_cache.Output )
+        self.LabelPreviewer = OpMultiLaneWrapper(OpLabelPreviewer, parent = self)
+        self.LabelPreviewer.Labels.connect(self.opLabelPipeline.Output)
+        self.LabelPreview.connect(self.LabelPreviewer.Output)
 
         # Hook up the prediction pipeline inputs
         self.opPredictionPipeline = OpMultiLaneWrapper( OpPredictionPipeline, parent=self )

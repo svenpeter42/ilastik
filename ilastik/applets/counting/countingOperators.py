@@ -13,6 +13,37 @@ from lazyflow.utility import traceLogged
 
 from ilastik.applets.counting.countingsvr import SVR
 
+class OpLabelPreviewer(Operator):
+    name = "LabelPreviewer"
+    description = "Provides a Preview of the labels after gaussian smoothing"
+
+    inputSlots = [InputSlot("Labels"),
+                 InputSlot("Sigma", stype = "object")]
+    outputSlots = [OutputSlot("Output")]
+
+    def __init__(self, *args, **kwargs):
+        super(OpLabelPreviewer, self).__init__(*args, **kwargs)
+        self._svr = SVR()
+
+    def setupOutputs(self):
+        self.Output.meta.assignFrom(self.Labels.meta)
+        self.Output.meta.dtype = np.float32
+        self.Output.meta.drange = (0.0, 1.0)
+
+    @traceLogged(logger, level=logging.INFO, msg="OpTrainCounter: Training Counting Regressor")
+    def execute(self, slot, subindex, roi, result):
+        progress = 0
+        
+        key = roi.toSlice()
+        dot=self.Labels[key].wait()
+        self._svr.set_params(Sigma = self.Sigma.value)
+
+        result[...] = self._svr.smoothLabels(dot)
+        return result
+    
+    def propagateDirty(self, slot, subindex, roi):
+        self.Output.setDirty((slice(None)))
+
 class OpTrainCounter(Operator):
     name = "TrainCounter"
     description = "Train a random forest on multiple images"
@@ -56,6 +87,7 @@ class OpTrainCounter(Operator):
             #self.Classifier.setValue(self._svr)
             #self.outputs["Classifier"].meta.dtype = object
             #self.outputs["Classifier"].meta.shape = (self._forest_count,)
+
 
 
     @traceLogged(logger, level=logging.INFO, msg="OpTrainCounter: Training Counting Regressor")

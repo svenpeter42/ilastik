@@ -229,7 +229,38 @@ class CountingGui(LabelingGui):
         
         self._setUIParameters()
         
+<<<<<<< HEAD
         self._connectUIParameters()
+=======
+        self.labelingDrawerUi.DebugButton.pressed.connect(self._debug)
+        #elf._updateSVROptions()
+        self.labelingDrawerUi.boxListView.resetEmptyMessage("no boxes defined yet")
+        #self.labelingDrawerUi.boxListView._colorDialog=BoxDialog()
+        #self.labelingDrawerUi.TrainButton.pressed.connect(self._train)
+        #self.labelingDrawerUi.PredictionButton.pressed.connect(self.updateDensitySum)
+        self.labelingDrawerUi.SVROptions.currentIndexChanged.connect(self._updateSVROptions)
+        #self.labelingDrawerUi.OverBox.valueChanged.connect(self._updateOverMult)
+        #self.labelingDrawerUi.UnderBox.valueChanged.connect(self._updateUnderMult)
+        self.labelingDrawerUi.CBox.valueChanged.connect(self._updateC)
+        self.labelingDrawerUi.SigmaLine.editingFinished.connect(self._updateSigma)
+        self.labelingDrawerUi.SigmaLine.textChanged.connect(self._changedSigma)
+        self.labelingDrawerUi.EpsilonBox.valueChanged.connect(self._updateEpsilon)
+        self.labelingDrawerUi.MaxDepthBox.valueChanged.connect(self._updateMaxDepth)
+        self.labelingDrawerUi.NtreesBox.valueChanged.connect(self._updateNtrees)
+        
+
+        self._registerOperatorsToGuiCallbacks() 
+
+        
+        
+        self._updateNtrees()
+        self._updateMaxDepth()
+        
+        
+        self.changedSigma = False
+        
+        self.labelingDrawerUi.CountText.setReadOnly(True)
+        self.op.LabelPreviewer.Sigma.setValue(self.op.opTrain.Sigma.value)
         
         
                 
@@ -421,6 +452,7 @@ class CountingGui(LabelingGui):
         self.op.opTrain.C.setValue(self.labelingDrawerUi.CBox.value())
     def _updateSigma(self):
         if self._changedSigma:
+
             sigma = [float(n) for n in
                            self._labelControlUi.SigmaLine.text().split(" ")]
             
@@ -428,6 +460,10 @@ class CountingGui(LabelingGui):
             self.dotController.setDotsRadius(sigma[0]*2)
             self.op.opTrain.Sigma.setValue(sigma)
             self._changedSigma = False
+            self.op.LabelPreviewer.Sigma.setValue(sigma)
+            self.changedSigma = False
+        if hasattr(self, "labelPreviewLayer"):
+            self.labelPreviewLayer.resetBounds()
 
 
     def _updateEpsilon(self):
@@ -529,7 +565,7 @@ class CountingGui(LabelingGui):
      
 
 
-        slots = {'Prediction' : self.op.Density}
+        slots = {'Prediction' : self.op.Density, 'LabelPreview': self.op.LabelPreview}
 
         for name, slot in slots.items():
             if slot.ready():
@@ -537,9 +573,14 @@ class CountingGui(LabelingGui):
                 layer = ColortableLayer(LazyflowSource(slot), colorTable = colortables.jetTransparent(), normalize = 'auto')
                 layer.name = name
                 layer.visible = self.labelingDrawerUi.liveUpdateButton.isChecked()
+                if layer.name == "LabelPreview":
+                    layer.visible = True
+                    self.labelPreviewLayer = layer
                 #layer.visibleChanged.connect(self.updateShowPredictionCheckbox)
                 layers.append(layer)
 
+
+        #Set LabelPreview-layer to True
 
         boxlabelsrc = LazyflowSinkSource(self.op.BoxLabelImages,self.op.BoxLabelInputs )
         boxlabellayer = ColortableLayer(boxlabelsrc, colorTable = self._colorTable16, direct = False)

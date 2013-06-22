@@ -263,6 +263,21 @@ class SVR(object):
         f.close()
         return obj
 
+    def smoothLabels(self, dot):
+        
+        backupindices = np.where(dot == 2)
+        dot[backupindices] = 0
+        sigma = self._Sigma
+        
+        
+        if len(sigma) == 1 or len(sigma) < len(dot.shape):
+            sigma = sigma[0]
+        dot = ndimage.filters.gaussian_filter(dot.astype(np.float32), sigma) #TODO: use it later, but this
+        dot[backupindices] = 0
+        
+        return dot
+
+
     def prepareData(self, oldImg, oldDot, smooth, normalize):
 
         dot = np.copy(oldDot.reshape(oldImg.shape[:-1]))
