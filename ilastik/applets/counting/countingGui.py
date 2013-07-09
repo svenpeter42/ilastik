@@ -229,9 +229,7 @@ class CountingGui(LabelingGui):
         
         self._setUIParameters()
         
-<<<<<<< HEAD
         self._connectUIParameters()
-=======
         self.labelingDrawerUi.DebugButton.pressed.connect(self._debug)
         #elf._updateSVROptions()
         self.labelingDrawerUi.boxListView.resetEmptyMessage("no boxes defined yet")
@@ -457,13 +455,25 @@ class CountingGui(LabelingGui):
                            self._labelControlUi.SigmaLine.text().split(" ")]
             
             self.editor.crosshairControler.setSigma(sigma[0])
+<<<<<<< HEAD
             self.dotController.setDotsRadius(sigma[0]*2)
             self.op.opTrain.Sigma.setValue(sigma)
             self._changedSigma = False
+=======
+            if hasattr(self, "predictionLayer"):
+                print "RESET"
+                self.predictionLayer.resetBounds()
+            self.op.opTrain.Sigma.setValue(sigma)
+            if hasattr(self, "labelPreviewLayer"):
+                print "RESET"
+                self.labelPreviewLayer.resetBounds()
+>>>>>>> added new preview layers, ensemble learning, cplex implementation
             self.op.LabelPreviewer.Sigma.setValue(sigma)
+            if hasattr(self, "labelPreviewLayer"):
+                print "RESET"
+                self.labelPreviewLayer.resetBounds()
+            
             self.changedSigma = False
-        if hasattr(self, "labelPreviewLayer"):
-            self.labelPreviewLayer.resetBounds()
 
 
     def _updateEpsilon(self):
@@ -565,7 +575,8 @@ class CountingGui(LabelingGui):
      
 
 
-        slots = {'Prediction' : self.op.Density, 'LabelPreview': self.op.LabelPreview}
+        slots = {'Prediction' : self.op.Density, 'LabelPreview': self.op.LabelPreview, 'Uncertainty' :
+                 self.op.UncertaintyEstimate}
 
         for name, slot in slots.items():
             if slot.ready():
@@ -576,6 +587,8 @@ class CountingGui(LabelingGui):
                 if layer.name == "LabelPreview":
                     layer.visible = True
                     self.labelPreviewLayer = layer
+                if layer.name == "Prediction":
+                    self.predictionLayer = layer
                 #layer.visibleChanged.connect(self.updateShowPredictionCheckbox)
                 layers.append(layer)
 

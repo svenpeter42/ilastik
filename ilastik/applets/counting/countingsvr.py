@@ -29,6 +29,58 @@ import h5py, cPickle
 import sys
 from scipy import spatial
 
+class RegressorCplex(object):
+
+    def __init__(self, C=1, epsilon=0.1, penalty="l2",regularization="l2",pos_constr=False):
+        """
+            penalty : "l1" or "l2" penalty
+            
+        """
+        
+        self.penalty=penalty
+        self._C = C
+        self._epsilon = epsilon
+        self.regularization=regularization
+        
+        self.pos_constr=pos_constr
+    
+    def get_Xhat(self,X):
+        return np.hstack( [X,np.ones((X.shape[0],1))])
+    
+    def predictUnfiltered(self,X):
+        
+        oldShape = X.shape
+        result = np.dot(self.get_Xhat(X.reshape((-1, X.shape[-1]))),self.w).reshape(X.shape[:-1])
+        return result
+    
+    def fit(self,X,Yl,tags, boxConstraints = None):
+        import ctypes
+        import sitecustomize
+        extlib = ctypes.cdll.LoadLibrary("/home/bxu/code/testing/cpp/cplex/testlib.so")
+        #extlib.main()
+        c_float_p = ctypes.POINTER(ctypes.c_float)
+        c_char_p= ctypes.POINTER(ctypes.c_char)
+        c_double_p= ctypes.POINTER(ctypes.c_double)
+        X_intermediate = X.astype(np.float32)
+        X_p = X_intermediate.ctypes.data_as(c_float_p)
+        Yl_intermediate = Yl.astype(np.float32)
+        Yl_p = Yl_intermediate.ctypes.data_as(c_float_p)
+        numRows = X.shape[0]
+        numCols = X.shape[1]
+        self.w = np.zeros((numCols + 1), dtype = np.float64)
+        w_p = self.w.ctypes.data_as(c_double_p)
+
+
+        sitecustomize.debug_trace()
+        extlib.fit(X_p, Yl_p, w_p, tags[0], numRows, numCols, ctypes.c_double(self._C), ctypes.c_double(self._epsilon))
+        print self.w
+
+    def predict(self, X):
+        
+        oldShape = X.shape
+        result = np.dot(self.get_Xhat(X.reshape((-1, X.shape[-1]))),self.w).reshape(X.shape[:-1])
+        return result
+
 
 class RegressorGurobi(object):
     
@@ -200,7 +252,7 @@ class RegressorGurobi(object):
 
             self.w=np.array([w.x for w in w_vars]).reshape(-1,1)
 
-        #model.write("test.lp")
+        model.write("test.lp")
         return self  
 
     def predict(self, X):
@@ -218,9 +270,11 @@ class SVR(object):
 
     options = [
         {"method" : "svrBoxed-gurobi", "gui":["default", "svr"], "req":["gurobipy"]},
+        {"method" : "svrBoxed-cplex", "gui":["default", "svr"], "req":["cplex"]},
         {"method" : "rf-sklearn" ,"gui":["default","rf"], "req":["sklearn"]},
         #{"optimization" : "svr-sklearn", "kernel" : "rbf","gui":["default","svr"], "req":["sklearn"]},
         {"method" : "svr-gurobi", "gui":["default", "svr"], "req":["gurobipy"]}
+        
         #{"optimization" : "svr-gurobi", "gui":["default", "svr"], "req":["dummy"]}
     #{"optimization" : "svr", "kernel" : "linear","gui":["default","svr"]},
     #{"optimization" : "svr", "kernel" : "poly","gui":["default","svr"]},
@@ -323,6 +377,59 @@ class SVR(object):
         self.prepareData(img, dot, smooth, normalize)
         self.fitPrepared(newImg[mapping,:], newDot[mapping], tags)
 
+
+
+    def fitPreparedEnsemble(self, numRegressors, img, dot, tags, boxConstraints = []):
+        self._regressor = []
+        numFeatures = img.shape[-1]
+        numVariables = sum(img.shape[:-1])
+        
+        for i in range(numRegressors):
+            indices = np.random.randint(0,numVariables, size = numVariables / numRegressors)    
+            indices.sort()
+            cut = np.where(indices < tags[0])
+            newTags = [len(cut[0]), len(indices) - len(cut[0])]
+
+            
+            if numVariables == 0:
+                return False
+            success = False
+            #tags.append(len(boxConstraints))
+            newBoxConstraints = []
+            for constr in boxConstraints:
+                value, features = constr
+                value = value / numRegressors
+                boxIndices = np.random.randint(0,features.shape[0], size = features.shape[0] / numRegressors)
+                features = features[boxIndices, :]
+                newBoxConstraints.append((value, features))
+                
+
+
+            if self._method == "svrBoxed-gurobi":
+                regressor = RegressorGurobi(C = self._C, epsilon = self._epsilon)
+                regressor.fit(img[indices,:], dot[indices], newTags, newBoxConstraints)
+                self._regressor.append(regressor)
+                success = True
+
+            if self._method == "rf-sklearn":
+                from sklearn.ensemble import RandomForestRegressor as RFR
+                regressor = RFR(n_estimators=self._ntrees,max_depth=self._maxdepth)
+                regressor.fit(img, dot)
+                self._regressor.append(regressor)
+                success = True
+            
+            elif self._method == "svr-gurobi":
+                regressor = RegressorGurobi(C = self._C, epsilon = self._epsilon)
+                regressor.fit(img, dot)
+                self._regressor = regressor
+                success = True
+
+                
+
+        if success:
+            self._trained = True
+        return success
+    
     def fitPrepared(self, img, dot, tags, boxConstraints = []):
         
 
@@ -337,14 +444,8 @@ class SVR(object):
             from sklearn.ensemble import RandomForestRegressor as RFR
             
             regressor = RFR(n_estimators=self._ntrees,max_depth=self._maxdepth)
-            print "Trining the random forest ", regressor
             regressor.fit(img, dot)
 
-            #C = np.array([self.upperBounds[tag] for tag in tags], dtype = np.float)
-            #svr.fit(img, dot, tags, sample_weight = C) 
-            #svr.fit(img, dot) 
-            #print svr.predict(img)
-            #print svr.dual_coef_
             self._regressor = regressor
             success = True
 
@@ -367,6 +468,11 @@ class SVR(object):
             self._regressor = regressor
             success = True
             
+        elif self._method == "svrBoxed-cplex":
+            regressor = RegressorCplex(C = self._C, epsilon = self._epsilon)
+            regressor.fit(img, dot, tags, boxConstraints)
+            self._regressor = regressor
+            success = True
 
         if success:
             self._trained = True
@@ -376,22 +482,52 @@ class SVR(object):
         if not self._trained:
             return np.zeros(oldImage.shape[:-1])
         oldShape = oldImage.shape
+        resShape = oldShape[:-1]
         image = np.copy(oldImage.reshape((-1, oldImage.shape[-1])))
         if normalize:
             image = sklearn.preprocessing.normalize(image, axis=0)
         if self._method == "rf-sklearn":
-            res = self._regressor.predict(image)
+            if type(self._regressor) == list:
+                reslist = []
+                for r in self._regressor:
+                    reslist.append(r.predict(image))
+                res = np.dstack(reslist)
+                resShape = oldShape[:-1] + (len(self._regressor),)
+                #var = np.std(res, axis = 2)
+                #res = np.mean(res, axis = 2)
+            else:
+                res = self._regressor.predict(image)
         elif self._method == "svr-sklearn":
             res = self._regressor.predict(image)
         elif self._method == "svrBoxed-gurobi":
-            res = self._regressor.predict(image)
+            if type(self._regressor) == list:
+                reslist = []
+                for r in self._regressor:
+                    reslist.append(r.predict(image))
+                res = np.dstack(reslist)
+                resShape = oldShape[:-1] + (len(self._regressor),)
+                #var = np.std(res, axis = 2)
+                #res = np.mean(res, axis = 2)
+            else:
+                res = self._regressor.predict(image)
+        elif self._method == "svrBoxed-cplex":
+            if type(self._regressor) == list:
+                reslist = []
+                for r in self._regressor:
+                    reslist.append(r.predict(image))
+                res = np.dstack(reslist)
+                resShape = oldShape[:-1] + (len(self._regressor),)
+                #var = np.std(res, axis = 2)
+                #res = np.mean(res, axis = 2)
+            else:
+                res = self._regressor.predict(image)
         elif self._method == "svr-gurobi":
             res = self._regressor.predict(image)
 
         #res = np.zeros(oldShape[:-1])
         res = res.view(np.ndarray)
         res[np.where(res < 0)] = 0
-        return res.reshape(oldShape[:-1])
+        return res.reshape(resShape)
 
     def writeHDF5(self, cachePath, targetname):
         f = h5py.File(cachePath, 'w')
@@ -451,11 +587,9 @@ if __name__ == "__main__":
     dot[1,1] = 2
 
     backup_image = np.copy(img)
-    Counter = SVR(pMult, lMult, DENSITYBOUND, kernel = "linear", optimization =
-                 "svr")
     sigma = [0]
+    Counter = SVR(method = "svrBoxed-cplex", Sigma= sigma)
     testimg, testdot, testmapping, testtags = Counter.prepareData(img, dot,
-                                                                  sigma,
                                                                   normalize =
                                                                   False, smooth
                                                                   = True
@@ -467,7 +601,7 @@ if __name__ == "__main__":
     #boxConstraints = [(12, img[:,:,:])]
     #boxConstraints = [(3, img[0:30,0:30,:])]
     #boxConstraints.reshape((-1, boxConstraints.shape[-1]))
-    success = Counter.fitPrepared(testimg[testmapping,:], testdot[testmapping], testtags, epsilon = 0.000,
+    success = Counter.fitPrepared(testimg[testmapping,:], testdot[testmapping], testtags,
                                   boxConstraints = boxConstraints)
     #success = Counter.fitPrepared(testimg[indices,:], testdot[indices], testtags[:len(indices)], epsilon = 0.000)
     #print Counter.w, Counter.
@@ -489,7 +623,7 @@ if __name__ == "__main__":
     print "prediction"
     #print img
     #print newdot
-    print "sum", np.sum(newdot) / 1
+    print "sum", np.sum(newdot)
     try: 
         import matplotlib.pyplot as plt
         import matplotlib
@@ -503,6 +637,12 @@ if __name__ == "__main__":
         plt.show()
     except:
         pass
+
+
+
+
+
+
     #print Counter.w, Counter.b
     #debug_trace()
     #

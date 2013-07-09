@@ -52,7 +52,7 @@ class OpTrainCounter(Operator):
     inputSlots = [InputSlot("Images", level=1),InputSlot("Labels", level=1), InputSlot("fixClassifier", stype="bool"),
                   InputSlot("nonzeroLabelBlocks", level=1),
                   InputSlot("Sigma", value = [2.5], stype = "object"), 
-                  InputSlot("Epsilon", value = 1E-3, stype = "float"), 
+                  InputSlot("Epsilon", value = 0, stype = "float"), 
                   #InputSlot("UnderMult", value = 100, stype = "float"),
                   #InputSlot("OverMult", value = 100, stype = "float"), 
                   InputSlot("C", value = 1, stype = "float"), 
@@ -166,8 +166,9 @@ class OpTrainCounter(Operator):
                 boxConstraints.append(constraint)
 
         self.progressSignal(50)
+        result[0].fitPreparedEnsemble(10, fullFeatMatrix, fullLabelsMatrix, tags = fullTags, boxConstraints = boxConstraints)
         try:
-            result[0].fitPrepared(fullFeatMatrix, fullLabelsMatrix, tags = fullTags, boxConstraints = boxConstraints)
+            pass
         #req = pool.request(partial(result[0].fitPrepared, featMatrix, labelsMatrix, tagsMatrix, self.Epsilon.value))
         #pool.wait()
         #pool.clean()
@@ -197,7 +198,7 @@ class OpPredictCounter(Operator):
         nlabels=self.inputs["LabelsCount"].value
         self.PMaps.meta.dtype = np.float32
         self.PMaps.meta.axistags = copy.copy(self.Image.meta.axistags)
-        self.PMaps.meta.shape = self.Image.meta.shape[:-1] + (1,) # FIXME: This assumes that channel is the last axis
+        self.PMaps.meta.shape = self.Image.meta.shape[:-1] + (10,) # FIXME: This assumes that channel is the last axis
         self.PMaps.meta.drange = (0.0, 1.0)
 
     def execute(self, slot, subindex, roi, result):
