@@ -455,11 +455,9 @@ class CountingGui(LabelingGui):
                            self._labelControlUi.SigmaLine.text().split(" ")]
             
             self.editor.crosshairControler.setSigma(sigma[0])
-<<<<<<< HEAD
             self.dotController.setDotsRadius(sigma[0]*2)
             self.op.opTrain.Sigma.setValue(sigma)
             self._changedSigma = False
-=======
             if hasattr(self, "predictionLayer"):
                 print "RESET"
                 self.predictionLayer.resetBounds()
@@ -467,7 +465,6 @@ class CountingGui(LabelingGui):
             if hasattr(self, "labelPreviewLayer"):
                 print "RESET"
                 self.labelPreviewLayer.resetBounds()
->>>>>>> added new preview layers, ensemble learning, cplex implementation
             self.op.LabelPreviewer.Sigma.setValue(sigma)
             if hasattr(self, "labelPreviewLayer"):
                 print "RESET"
