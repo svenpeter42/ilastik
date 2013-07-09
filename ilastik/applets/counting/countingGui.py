@@ -241,7 +241,7 @@ class CountingGui(LabelingGui):
         #self.labelingDrawerUi.UnderBox.valueChanged.connect(self._updateUnderMult)
         self.labelingDrawerUi.CBox.valueChanged.connect(self._updateC)
         self.labelingDrawerUi.SigmaLine.editingFinished.connect(self._updateSigma)
-        self.labelingDrawerUi.SigmaLine.textChanged.connect(self._changedSigma)
+#        self.labelingDrawerUi.SigmaLine.textChanged.connect(self._changedSigma)
         self.labelingDrawerUi.EpsilonBox.valueChanged.connect(self._updateEpsilon)
         self.labelingDrawerUi.MaxDepthBox.valueChanged.connect(self._updateMaxDepth)
         self.labelingDrawerUi.NtreesBox.valueChanged.connect(self._updateNtrees)

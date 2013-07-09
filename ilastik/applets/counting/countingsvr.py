@@ -270,7 +270,7 @@ class SVR(object):
 
     options = [
         {"method" : "svrBoxed-gurobi", "gui":["default", "svr"], "req":["gurobipy"]},
-        {"method" : "svrBoxed-cplex", "gui":["default", "svr"], "req":["cplex"]},
+        {"method" : "svrBoxed-cplex", "gui":["default", "svr"], "req":["ilastik.applets.counting.cplexwrapper"]},
         {"method" : "rf-sklearn" ,"gui":["default","rf"], "req":["sklearn"]},
         #{"optimization" : "svr-sklearn", "kernel" : "rbf","gui":["default","svr"], "req":["sklearn"]},
         {"method" : "svr-gurobi", "gui":["default", "svr"], "req":["gurobipy"]}
