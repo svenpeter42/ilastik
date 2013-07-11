@@ -59,7 +59,7 @@ class RegressorCplex(object):
         #extlib.main()
         c_float_p = ctypes.POINTER(ctypes.c_float)
         c_char_p= ctypes.POINTER(ctypes.c_char)
-        c_int_p= ctypes.POINTER(ctypes.c_int)
+        c_int_p= ctypes.POINTER(ctypes.c_int64)
         c_double_p= ctypes.POINTER(ctypes.c_double)
         X = X.astype(np.float64)
         Yl = Yl.astype(np.float64)
@@ -83,10 +83,13 @@ class RegressorCplex(object):
             numConstraints = len(boxConstraints["boxValues"])
             boxValues = boxConstraints["boxValues"].astype(np.float64)
             boxValues_p = boxValues.ctypes.data_as(c_double_p)
-            boxIndices = boxConstraints["boxIndices"].astype(np.int)
+            boxIndices = boxConstraints["boxIndices"].astype(np.int64)
             boxIndices_p = boxIndices.ctypes.data_as(c_int_p)
-            boxFeatures = boxConstraints["boxFeatures"].astype(np.float64)
+            boxFeatures = boxConstraints["boxFeatures"].astype(np.float64).reshape((-1,numCols))
             boxFeatures_p = boxFeatures.ctypes.data_as(c_double_p)
+            assert(len(boxFeatures.shape) == 2)
+            print boxIndices[-1], boxFeatures.shape[0]
+            assert(boxIndices[-1] == boxFeatures.shape[0])
 
         cplexwrapper.extlib.fit(X_p, Yl_p, w_p, ctypes.c_int(tags[0]), numRows, numCols, ctypes.c_double(self._C),
                                 ctypes.c_double(self._epsilon), numConstraints, boxValues_p, boxIndices_p, boxFeatures_p)
@@ -170,6 +173,7 @@ class RegressorGurobi(object):
         ### add constraint for the variables
         print "adding constraint penalty"
         if tags:
+            print "huh, wtf"
             for i in range(sum(tags)):
                 #logme("%.2f"%(i/float(X_hat.shape[0])*100.0))
                 constr=gu.quicksum([float(X_hat[i,j])*w_vars[j] for j in range(self.Nf+1)]) - u_vars1[i]<=float(Yl[i]) + self._epsilon
@@ -453,7 +457,7 @@ class SVR(object):
         return success
     
     def fitPrepared(self, img, dot, tags, boxConstraints = []):
-        
+         
         numFeatures = img.shape[-1]
         numVariables = sum(img.shape[:-1])
         if numVariables == 0:
@@ -479,7 +483,8 @@ class SVR(object):
 
         elif self._method == "svrBoxed-gurobi":
             regressor = RegressorGurobi(C = self._C, epsilon = self._epsilon)
-            regressor.fit(img, dot, tags, self.getOldBoxConstraints(boxConstraints))
+            regressor.fit(img, dot, tags, self.getOldBoxConstraints(boxConstraints, numFeatures
+                                                                   ))
             self._regressor = regressor
             success = True
         
@@ -572,15 +577,14 @@ class SVR(object):
             setattr(self, "_" + key, params[key])
         return self
 
-    def getOldBoxConstraints(self, newBoxConstraints):
+    def getOldBoxConstraints(self, newBoxConstraints, numFeatures):
         if newBoxConstraints == None:
             return None
         boxConstraints = []
-        import sitecustomize
-        sitecustomize.debug_trace()
         boxIndices = newBoxConstraints["boxIndices"]
         boxValues = newBoxConstraints["boxValues"]
         boxFeatures = newBoxConstraints["boxFeatures"]
+        assert(len(boxFeatures.shape) == 2)
         for i, boxValue in enumerate(boxValues):
             slicing = slice(boxIndices[i], boxIndices[i + 1])
             valfeaturepair = (boxValue, boxFeatures[slicing,:])
@@ -599,29 +603,27 @@ if __name__ == "__main__":
     #img = img[..., None]
     
     DENSITYBOUND=False
-    pMult = 100 #This is the penalty-multiplier for underestimating the density
-    lMult = 100 #This is the penalty-multiplier for overestimating the density
 
     #shortExample
-    limits = [50, 200]
-    img = img[limits[0]:limits[1],limits[0]:limits[1],:]
-    dot = dot[limits[0]:limits[1],limits[0]:limits[1]]
+#    limits = [50, 200]
+#    img = img[limits[0]:limits[1],limits[0]:limits[1],:]
+#    dot = dot[limits[0]:limits[1],limits[0]:limits[1]]
 
    #ToyExample
-    img = np.ones((9,9,2),dtype=np.float32)
-    dot = np.zeros((9,9))
-    img = 1 * img
-    img[:,:,1] = np.random.rand(*img.shape[:-1])
-    img[0,0] = 3
-    img[1,1] = 3
-    img[3:6,3:6] = 50
-    dot[4,4] = 1
-    dot[5,5] = 1
-    dot[0,0] = 2
-    dot[1,1] = 2
+#    img = np.ones((9,9,2),dtype=np.float32)
+#    dot = np.zeros((9,9))
+#    img = 1 * img
+#    img[:,:,1] = np.random.rand(*img.shape[:-1])
+#    img[0,0] = 3
+#    img[1,1] = 3
+#    img[3:6,3:6] = 50
+#    dot[4,4] = 1
+#    dot[5,5] = 1
+#    dot[0,0] = 2
+#    dot[1,1] = 2
 
     backup_image = np.copy(img)
-    sigma = [0]
+    sigma = [2.5]
     Counter = SVR(method = "svrBoxed-cplex", Sigma= sigma)
     testimg, testdot, testmapping, testtags = Counter.prepareData(img, dot,
                                                                   normalize =
@@ -632,15 +634,17 @@ if __name__ == "__main__":
     #print testimg
     #print testdot, np.sum(testdot)
     
-    boxValues = np.array([2.5])
-    boxIndices = np.array([0, 25])
-    boxFeatures = np.array(img[:5,:5,:],dtype=np.float64)
+    boxIndices = np.array([0, 2500,5000])
+    boxFeatures = np.array(img[:50,:100,:],dtype=np.float64)
+    boxValues = np.array([15.0, 10.0])
     
     boxConstraints = {"boxValues": boxValues, "boxIndices" : boxIndices, "boxFeatures" :boxFeatures}
+    #boxConstraints = None
 
     #boxConstraints = [(12, img[:,:,:])]
     #boxConstraints = [(3, img[0:30,0:30,:])]
     #boxConstraints.reshape((-1, boxConstraints.shape[-1]))
+    print testtags
     success = Counter.fitPrepared(testimg[testmapping,:], testdot[testmapping], testtags,
                                   boxConstraints = boxConstraints)
     #success = Counter.fitPrepared(testimg[indices,:], testdot[indices], testtags[:len(indices)], epsilon = 0.000)

@@ -596,6 +596,7 @@ class OpEnsembleMargin(Operator):
         taggedShape = self.Input.meta.getTaggedShape()
         taggedShape['c'] = 1
         self.Output.meta.shape = taggedShape.values()
+        taggedShape = self.Input.meta.getTaggedShape()
 
     def execute(self, slot, subindex, roi, result):
         roi = copy.copy(roi)

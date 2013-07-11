@@ -382,9 +382,9 @@ class CountingGui(LabelingGui):
         for option in self.op.options:
             if "req" in option.keys():
                 try:
-                    import imp
+                    import importlib
                     for req in option["req"]:
-                        imp.find_module(req)
+                        importlib.import_module(req)
                 except:
                     continue
             #values=[v for k,v in option.items() if k not in ["gui", "req"]]
@@ -572,8 +572,8 @@ class CountingGui(LabelingGui):
      
 
 
-        slots = {'Prediction' : self.op.Density, 'LabelPreview': self.op.LabelPreview, 'Uncertainty' :
-                 self.op.UncertaintyEstimate}
+        slots = {'Prediction' : self.op.Density, 'LabelPreview': self.op.LabelPreview}#, 'Uncertainty' :
+        #         self.op.UncertaintyEstimate}
 
         for name, slot in slots.items():
             if slot.ready():
