@@ -54,26 +54,42 @@ class RegressorCplex(object):
         return result
     
     def fit(self,X,Yl,tags, boxConstraints = None):
+        import cplexwrapper
         import ctypes
-        import sitecustomize
-        extlib = ctypes.cdll.LoadLibrary("/home/bxu/code/testing/cpp/cplex/testlib.so")
         #extlib.main()
         c_float_p = ctypes.POINTER(ctypes.c_float)
         c_char_p= ctypes.POINTER(ctypes.c_char)
+        c_int_p= ctypes.POINTER(ctypes.c_int)
         c_double_p= ctypes.POINTER(ctypes.c_double)
-        X_intermediate = X.astype(np.float32)
-        X_p = X_intermediate.ctypes.data_as(c_float_p)
-        Yl_intermediate = Yl.astype(np.float32)
-        Yl_p = Yl_intermediate.ctypes.data_as(c_float_p)
+        X = X.astype(np.float64)
+        Yl = Yl.astype(np.float64)
+        X_p = X.ctypes.data_as(c_double_p)
+        Yl_p = Yl.ctypes.data_as(c_double_p)
         numRows = X.shape[0]
         numCols = X.shape[1]
-        self.w = np.zeros((numCols + 1), dtype = np.float64)
+        self.w = np.zeros((numCols + 1), dtype = np.float64).reshape(-1, 1)
         w_p = self.w.ctypes.data_as(c_double_p)
+        
 
 
-        sitecustomize.debug_trace()
-        extlib.fit(X_p, Yl_p, w_p, tags[0], numRows, numCols, ctypes.c_double(self._C), ctypes.c_double(self._epsilon))
-        print self.w
+        #import sitecustomize
+        #sitecustomize.debug_trace()
+        numConstraints = 0
+        boxValues_p = None
+        boxIndices_p = None
+        boxFeatures_p = None
+
+        if type(boxConstraints) == dict:
+            numConstraints = len(boxConstraints["boxValues"])
+            boxValues = boxConstraints["boxValues"].astype(np.float64)
+            boxValues_p = boxValues.ctypes.data_as(c_double_p)
+            boxIndices = boxConstraints["boxIndices"].astype(np.int)
+            boxIndices_p = boxIndices.ctypes.data_as(c_int_p)
+            boxFeatures = boxConstraints["boxFeatures"].astype(np.float64)
+            boxFeatures_p = boxFeatures.ctypes.data_as(c_double_p)
+
+        cplexwrapper.extlib.fit(X_p, Yl_p, w_p, ctypes.c_int(tags[0]), numRows, numCols, ctypes.c_double(self._C),
+                                ctypes.c_double(self._epsilon), numConstraints, boxValues_p, boxIndices_p, boxFeatures_p)
 
     def predict(self, X):
         
@@ -291,12 +307,10 @@ class SVR(object):
                  **kwargs
                  ):
         """
-        underMult : penalty-multiplier for underestimating density
-        overMult : penalty-multiplier for overestimating the density
         """
         self.DENSITYBOUND=True
         
-        self._trained = False
+        self._numRegressors = 0
         #self.upperBounds = [None, underMult, overMult]
         self._Sigma = Sigma
         self._C = C
@@ -332,7 +346,7 @@ class SVR(object):
         return dot
 
 
-    def prepareData(self, oldImg, oldDot, smooth, normalize):
+    def prepareData(self, oldImg, oldDot, smooth = True, normalize = False):
 
         dot = np.copy(oldDot.reshape(oldImg.shape[:-1]))
         backupindices = np.where(dot == 2)
@@ -356,10 +370,10 @@ class SVR(object):
         pindices = np.where(dot > 0.0001)[0]
         #pindices = pindices[:250]
         lindices = None
-        if self.DENSITYBOUND:
-            lindices = np.concatenate((nindices, pindices))
-        else:
-            lindices = nindices
+        #if self.DENSITYBOUND:
+        #    lindices = np.concatenate((nindices, pindices))
+        #else:
+        lindices = nindices
 
         #lindices = np.concatenate((pindices, nindices))
         numVariables = len(pindices) + len(lindices) 
@@ -383,7 +397,9 @@ class SVR(object):
         self._regressor = []
         numFeatures = img.shape[-1]
         numVariables = sum(img.shape[:-1])
-        
+       
+        if numRegressors == 1:
+            return self.fitPrepared(img, dot, tags, boxConstraints)
         for i in range(numRegressors):
             indices = np.random.randint(0,numVariables, size = numVariables / numRegressors)    
             indices.sort()
@@ -410,29 +426,34 @@ class SVR(object):
                 regressor.fit(img[indices,:], dot[indices], newTags, newBoxConstraints)
                 self._regressor.append(regressor)
                 success = True
+            
+            if self._method == "svrBoxed-cplex":
+                regressor = RegressorCplex(C = self._C, epsilon = self._epsilon)
+                regressor.fit(img[indices,:], dot[indices], newTags, newBoxConstraints)
+                self._regressor.append(regressor)
+                success = True
 
             if self._method == "rf-sklearn":
                 from sklearn.ensemble import RandomForestRegressor as RFR
                 regressor = RFR(n_estimators=self._ntrees,max_depth=self._maxdepth)
-                regressor.fit(img, dot)
+                regressor.fit(img[indices,:], dot[indices])
                 self._regressor.append(regressor)
                 success = True
             
             elif self._method == "svr-gurobi":
                 regressor = RegressorGurobi(C = self._C, epsilon = self._epsilon)
-                regressor.fit(img, dot)
+                regressor.fit(img[indices,:], dot[indices])
                 self._regressor = regressor
                 success = True
 
                 
 
         if success:
-            self._trained = True
+            self._numRegressors = numRegressors
         return success
     
     def fitPrepared(self, img, dot, tags, boxConstraints = []):
         
-
         numFeatures = img.shape[-1]
         numVariables = sum(img.shape[:-1])
         if numVariables == 0:
@@ -458,7 +479,7 @@ class SVR(object):
 
         elif self._method == "svrBoxed-gurobi":
             regressor = RegressorGurobi(C = self._C, epsilon = self._epsilon)
-            regressor.fit(img, dot, tags, boxConstraints)
+            regressor.fit(img, dot, tags, self.getOldBoxConstraints(boxConstraints))
             self._regressor = regressor
             success = True
         
@@ -475,11 +496,11 @@ class SVR(object):
             success = True
 
         if success:
-            self._trained = True
+            self._numRegressors = 1
         return success
     
     def predict(self, oldImage, normalize = False):
-        if not self._trained:
+        if self._numRegressors == 0:
             return np.zeros(oldImage.shape[:-1])
         oldShape = oldImage.shape
         resShape = oldShape[:-1]
@@ -551,7 +572,20 @@ class SVR(object):
             setattr(self, "_" + key, params[key])
         return self
 
-
+    def getOldBoxConstraints(self, newBoxConstraints):
+        if newBoxConstraints == None:
+            return None
+        boxConstraints = []
+        import sitecustomize
+        sitecustomize.debug_trace()
+        boxIndices = newBoxConstraints["boxIndices"]
+        boxValues = newBoxConstraints["boxValues"]
+        boxFeatures = newBoxConstraints["boxFeatures"]
+        for i, boxValue in enumerate(boxValues):
+            slicing = slice(boxIndices[i], boxIndices[i + 1])
+            valfeaturepair = (boxValue, boxFeatures[slicing,:])
+            boxConstraints.append(valfeaturepair)
+        return boxConstraints
 
 
 
@@ -597,7 +631,13 @@ if __name__ == "__main__":
     #print "blub", testimg.shape
     #print testimg
     #print testdot, np.sum(testdot)
-    boxConstraints = []
+    
+    boxValues = np.array([2.5])
+    boxIndices = np.array([0, 25])
+    boxFeatures = np.array(img[:5,:5,:],dtype=np.float64)
+    
+    boxConstraints = {"boxValues": boxValues, "boxIndices" : boxIndices, "boxFeatures" :boxFeatures}
+
     #boxConstraints = [(12, img[:,:,:])]
     #boxConstraints = [(3, img[0:30,0:30,:])]
     #boxConstraints.reshape((-1, boxConstraints.shape[-1]))
@@ -624,19 +664,19 @@ if __name__ == "__main__":
     #print img
     #print newdot
     print "sum", np.sum(newdot)
-    try: 
-        import matplotlib.pyplot as plt
-        import matplotlib
-        fig = plt.figure()
-        fig.add_subplot(1,3,1)
-        plt.imshow(testimg[...,0].astype('uint8').reshape(backup_image.shape[:-1]), cmap=matplotlib.cm.gray)
-        fig.add_subplot(1,3,2)
-        plt.imshow(newdot.reshape(backup_image.shape[:-1]), cmap=matplotlib.cm.gray)
-        fig.add_subplot(1,3,3)
-        plt.imshow(testdot.reshape(backup_image.shape[:-1]), cmap=matplotlib.cm.gray)
-        plt.show()
-    except:
-        pass
+    #try: 
+    #    import matplotlib.pyplot as plt
+    #    import matplotlib
+    #    fig = plt.figure()
+    #    fig.add_subplot(1,3,1)
+    #    plt.imshow(testimg[...,0].astype('uint8').reshape(backup_image.shape[:-1]), cmap=matplotlib.cm.gray)
+    #    fig.add_subplot(1,3,2)
+    #    plt.imshow(newdot.reshape(backup_image.shape[:-1]), cmap=matplotlib.cm.gray)
+    #    fig.add_subplot(1,3,3)
+    #    plt.imshow(testdot.reshape(backup_image.shape[:-1]), cmap=matplotlib.cm.gray)
+    #    plt.show()
+    #except:
+    #    pass
 
 
 

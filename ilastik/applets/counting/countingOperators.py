@@ -13,6 +13,8 @@ from lazyflow.utility import traceLogged
 
 from ilastik.applets.counting.countingsvr import SVR
 
+numRegressors = 1
+
 class OpLabelPreviewer(Operator):
     name = "LabelPreviewer"
     description = "Provides a Preview of the labels after gaussian smoothing"
@@ -53,8 +55,6 @@ class OpTrainCounter(Operator):
                   InputSlot("nonzeroLabelBlocks", level=1),
                   InputSlot("Sigma", value = [2.5], stype = "object"), 
                   InputSlot("Epsilon", value = 0, stype = "float"), 
-                  #InputSlot("UnderMult", value = 100, stype = "float"),
-                  #InputSlot("OverMult", value = 100, stype = "float"), 
                   InputSlot("C", value = 1, stype = "float"), 
                   InputSlot("SelectedOption", 
                             value = SVR.options[0],
@@ -119,13 +119,12 @@ class OpTrainCounter(Operator):
                 #tagsMatrix.append(tags)
 
 
-
         posTags = [tag[0] for tag in tagList]
         negTags = [tag[1] for tag in tagList]
         numPosTags = np.sum(posTags)
         numTags = np.sum(posTags) + np.sum(negTags)
-        fullFeatMatrix = np.ndarray((numTags, self.Images[0].meta.shape[-1]))
-        fullLabelsMatrix = np.ndarray((numTags))
+        fullFeatMatrix = np.ndarray((numTags, self.Images[0].meta.shape[-1]), dtype = np.float64)
+        fullLabelsMatrix = np.ndarray((numTags), dtype = np.float64)
         fullFeatMatrix[:] = np.NAN
         fullLabelsMatrix[:] = np.NAN
         currPosCount = 0
@@ -139,34 +138,22 @@ class OpTrainCounter(Operator):
             currNegCount += negTags[i]
 
 
-        if np.isnan(np.sum(fullFeatMatrix)):
-            raise Exception("NAN NAN NAN NAN BATMAN")
-        #featMatrix=np.concatenate(featMatrix,axis=0)
-        #labelsMatrix=np.concatenate(labelsMatrix,axis=0)
-        #tagsMatrix=np.concatenate(tagsMatrix,axis=0)
-
-        # train and store self._forest_count forests in parallel
+        assert(not np.isnan(np.sum(fullFeatMatrix)))
 
         fullTags = [np.sum(posTags), np.sum(negTags)]
         #pool = RequestPool()
 
         self.progressSignal(30)
-        boxConstraints = []
+
+
+        boxConstraints = None
         if self.BoxConstraints.ready():
             constraints = self.BoxConstraints.value
-            for constr in constraints:
-
-                value = float(constr[2].toDouble()[0])
-                slicing = [slice(start,stop) for start, stop in zip(constr[0][1:-2], constr[1][1:-2])]
-                slicing.append(slice(None)) 
-                slicing = tuple(slicing)
-                features = self.Images[0][slicing].wait() 
-                features = features.reshape((-1, features.shape[-1]))
-                constraint = (value, features)
-                boxConstraints.append(constraint)
+            if len(constraints) > 0:
+                boxConstraints = self.constructBoxConstraints(constraints)
 
         self.progressSignal(50)
-        result[0].fitPreparedEnsemble(10, fullFeatMatrix, fullLabelsMatrix, tags = fullTags, boxConstraints = boxConstraints)
+        result[0].fitPreparedEnsemble(numRegressors, fullFeatMatrix, fullLabelsMatrix, tags = fullTags, boxConstraints = boxConstraints)
         try:
             pass
         #req = pool.request(partial(result[0].fitPrepared, featMatrix, labelsMatrix, tagsMatrix, self.Epsilon.value))
@@ -182,6 +169,40 @@ class OpTrainCounter(Operator):
     def propagateDirty(self, slot, subindex, roi):
         if slot is not self.inputs["fixClassifier"] and self.inputs["fixClassifier"].value == False:
             self.outputs["Classifier"].setDirty((slice(None),))
+    
+    def constructBoxConstraints(self, constraints):
+        
+        shape = np.array([[stop - start for start, stop in zip(constr[0][1:-2], constr[1][1:-2])] for constr in
+                   constraints])
+        taggedShape = self.Images[0].meta.getTaggedShape()
+        numcols = taggedShape['c']
+        shape = shape[:,0] * shape[:,1]
+        shape = np.sum(shape,axis = 0)
+        constraintmatrix = np.ndarray(shape = (shape, numcols))
+        constraintindices = []
+        constraintvalues =  []
+        offset = 0
+        for constr in constraints:
+            imagenumber = 0 #TODO: pass information about the image number from the box constraints
+            slicing = [slice(start,stop) for start, stop in zip(constr[0][1:-2], constr[1][1:-2])]
+            numrows = (slicing[0].stop - slicing[0].start) * (slicing[1].stop - slicing[1].start)
+            slicing.append(slice(None)) 
+            slicing = tuple(slicing)
+
+            constraintmatrix[offset:offset + numrows,:] = self.Images[imagenumber][slicing].wait().reshape((numrows,
+                                                                                                  -1))
+            constraintindices.append(offset)
+            value = float(constr[2].toDouble()[0])
+            constraintvalues.append(value)
+            offset = offset + numrows
+        constraintindices.append(offset)
+
+        constraintvalues = np.array(constraintvalues, np.float64)
+        constraintindices = np.array(constraintindices, np.int)
+
+        boxConstraints = {"boxFeatures" : constraintmatrix, "boxValues" : constraintvalues, "boxIndices" :
+                          constraintindices}
+        return boxConstraints
 
 
 
@@ -198,7 +219,7 @@ class OpPredictCounter(Operator):
         nlabels=self.inputs["LabelsCount"].value
         self.PMaps.meta.dtype = np.float32
         self.PMaps.meta.axistags = copy.copy(self.Image.meta.axistags)
-        self.PMaps.meta.shape = self.Image.meta.shape[:-1] + (10,) # FIXME: This assumes that channel is the last axis
+        self.PMaps.meta.shape = self.Image.meta.shape[:-1] + (max(1, self.Classifier.value._numRegressors),) # FIXME: This assumes that channel is the last axis
         self.PMaps.meta.drange = (0.0, 1.0)
 
     def execute(self, slot, subindex, roi, result):
