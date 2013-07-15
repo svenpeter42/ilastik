@@ -67,6 +67,7 @@ int fit(const double * X_p, const double * Yl_p, double* w, int postags, int num
   env = CPXopenCPLEX (&status);
   lp = CPXcreateprob (env, &status, probname);
   status = CPXsetintparam (env, CPX_PARAM_SCRIND, CPX_ON);
+  status = CPXsetintparam (env, CPX_PARAM_BARCOLNZ, 2);
   if ( status ) {
     fprintf (stderr,
              "Failure to create CPLEX environment, error %d.\n", status);
@@ -172,7 +173,7 @@ int fit(const double * X_p, const double * Yl_p, double* w, int postags, int num
                       lb, ub, NULL);
 
   status = CPXcopyqpsep (env, lp, qsepvec);
-  //status = CPXwriteprob (env, lp, "qpex1.lp", NULL);
+  status = CPXwriteprob (env, lp, "qpex1.lp", NULL);
   status = CPXqpopt (env, lp);
   status = CPXgetx (env, lp, w, 0, numFeatures);
 

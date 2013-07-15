@@ -13,8 +13,7 @@ from lazyflow.utility import traceLogged
 
 from ilastik.applets.counting.countingsvr import SVR
 
-numRegressors = 1
-
+numRegressors = 4
 class OpLabelPreviewer(Operator):
     name = "LabelPreviewer"
     description = "Provides a Preview of the labels after gaussian smoothing"
@@ -153,7 +152,8 @@ class OpTrainCounter(Operator):
                 boxConstraints = self.constructBoxConstraints(constraints)
 
         self.progressSignal(50)
-        result[0].fitPreparedEnsemble(numRegressors, fullFeatMatrix, fullLabelsMatrix, tags = fullTags, boxConstraints = boxConstraints)
+        result[0].fitPrepared(fullFeatMatrix, fullLabelsMatrix, tags = fullTags, boxConstraints = boxConstraints, numRegressors
+                     = numRegressors)
         try:
             pass
         #req = pool.request(partial(result[0].fitPrepared, featMatrix, labelsMatrix, tagsMatrix, self.Epsilon.value))

@@ -79,19 +79,20 @@ class RegressorCplex(object):
         boxIndices_p = None
         boxFeatures_p = None
         dens_p = None
-        if type(boxConstraints) == dict:
+        if boxConstraints and type(boxConstraints) == dict:
             numConstraints = len(boxConstraints["boxValues"])
             boxValues = boxConstraints["boxValues"].astype(np.float64)
             boxValues_p = boxValues.ctypes.data_as(c_double_p)
             boxIndices = boxConstraints["boxIndices"].astype(np.int64)
             boxIndices_p = boxIndices.ctypes.data_as(c_int_p)
-            boxFeatures = boxConstraints["boxFeatures"].astype(np.float64).reshape((-1,numCols))
+            boxFeatures = boxConstraints["boxFeatures"].astype(np.float64)
             boxFeatures_p = boxFeatures.ctypes.data_as(c_double_p)
             assert(len(boxFeatures.shape) == 2)
             print boxIndices[-1], boxFeatures.shape[0]
             assert(boxIndices[-1] == boxFeatures.shape[0])
             #self.dens = np.zeros((boxIndices[-1]), dtype = np.float64).reshape(-1, 1)
             #dens_p = self.dens.ctypes.data_as(c_double_p)
+        #print "constraints:", boxFeatures.shape[0]
 
         cplexwrapper.extlib.fit(X_p, Yl_p, w_p, ctypes.c_int(tags[0]), numRows, numCols, ctypes.c_double(self._C),
                                 ctypes.c_double(self._epsilon), numConstraints, boxValues_p, boxIndices_p,
@@ -402,24 +403,69 @@ class SVR(object):
 
         return img, dot, mapping, tags
    
-    def fit(self, img, dot, smooth = True, normalize = False):
+    def fit(self, img, dot, boxConstraints = [], smooth = True, normalize = False, numRegressors = 1):
 
         newImg, newDot, mapping, tags = \
         self.prepareData(img, dot, smooth, normalize)
-        self.fitPrepared(newImg[mapping,:], newDot[mapping], tags)
+        self.fitPrepared(newImg[mapping,:], newDot[mapping], tags, boxConstraints, numRegressors)
 
 
     def splitBoxConstraints(self, numRegressors, boxConstraints):
+        
+        if boxConstraints is None or type(boxConstraints) is not dict:
+            return [None for i in range(numRegressors)]
+        boxIndices = boxConstraints["boxIndices"]
+        boxValues = boxConstraints["boxValues"]
+        boxFeatures = boxConstraints["boxFeatures"]
+        indices = np.arange(boxFeatures.shape[0])
+        np.random.shuffle(indices)
+        splits = np.array_split(indices, numRegressors)
+        
+        boxConstraintList = []
+        
+        for split in splits:
+            subBoxIndices = [0]
+            subBoxValues = []
+            np.sort(split)
+            j = 1
+            limit = boxIndices[j]
+            for count, index in enumerate(split):
+                if index >= limit:
+                    subBoxIndices.append(count)
+                    j = j + 1
+                    limit = boxIndices[j]
+            subBoxIndices.append(len(split))
+            for j, _ in enumerate(subBoxIndices[:-1]):
+                subVal = boxValues[j] * (subBoxIndices[j + 1] - subBoxIndices[j]) / (boxIndices[j + 1] - boxIndices[j])
+                subBoxValues.append(subVal)
+
+            subBoxFeatures = boxFeatures[split,:]
+            subBoxConstraint = {"boxValues" : np.array(subBoxValues), "boxIndices" : np.array(subBoxIndices),
+                                "boxFeatures" : subBoxFeatures}
+            boxConstraintList.append(subBoxConstraint)
+
+        return boxConstraintList
 
 
 
-    def fitPreparedEnsemble(self, numRegressors, img, dot, tags, boxConstraints = []):
+
+    def fitPrepared(self, img, dot, tags, boxConstraints = [], numRegressors = 1):
         self._regressor = []
         numFeatures = img.shape[-1]
         numVariables = sum(img.shape[:-1])
+        if numVariables == 0:
+            return
        
         if numRegressors == 1:
-            return self.fitPrepared(img, dot, tags, boxConstraints)
+            try:
+                self._regressor = [self._fit(img, dot, tags, boxConstraints)]
+            except:
+                pass
+            self._numRegressors = len(self._regressor)
+            return 
+        
+        splitBoxConstraints = self.splitBoxConstraints(numRegressors, boxConstraints)
+        
         for i in range(numRegressors):
             indices = np.random.randint(0,numVariables, size = numVariables / numRegressors)    
             indices.sort()
@@ -428,98 +474,48 @@ class SVR(object):
 
             
             if numVariables == 0:
-                return False
-            success = False
+                return 
             #tags.append(len(boxConstraints))
-            newBoxConstraints = []
-            for constr in boxConstraints:
-                value, features = constr
-                value = value / numRegressors
-                boxIndices = np.random.randint(0,features.shape[0], size = features.shape[0] / numRegressors)
-                features = features[boxIndices, :]
-                newBoxConstraints.append((value, features))
                 
+            newBoxConstraints = splitBoxConstraints[i]
 
-
-            if self._method == "svrBoxed-gurobi":
-                regressor = RegressorGurobi(C = self._C, epsilon = self._epsilon)
-                regressor.fit(img[indices,:], dot[indices], newTags, newBoxConstraints)
+            try:
+                regressor = self._fit(img[indices, :], dot[indices], newTags, newBoxConstraints)
                 self._regressor.append(regressor)
-                success = True
-            
-            if self._method == "svrBoxed-cplex":
-                regressor = RegressorCplex(C = self._C, epsilon = self._epsilon)
-                regressor.fit(img[indices,:], dot[indices], newTags, newBoxConstraints)
-                self._regressor.append(regressor)
-                success = True
+            except RuntimeError as err:
+                raise err
+                pass
 
-            if self._method == "rf-sklearn":
-                from sklearn.ensemble import RandomForestRegressor as RFR
-                regressor = RFR(n_estimators=self._ntrees,max_depth=self._maxdepth)
-                regressor.fit(img[indices,:], dot[indices])
-                self._regressor.append(regressor)
-                success = True
-            
-            elif self._method == "svr-gurobi":
-                regressor = RegressorGurobi(C = self._C, epsilon = self._epsilon)
-                regressor.fit(img[indices,:], dot[indices])
-                self._regressor = regressor
-                success = True
+        self._numRegressors = len(self._regressor)
 
-                
-
-        if success:
-            self._numRegressors = numRegressors
-        return success
+        return 
     
-    def fitPrepared(self, img, dot, tags, boxConstraints = []):
-         
-        numFeatures = img.shape[-1]
-        numVariables = sum(img.shape[:-1])
-        if numVariables == 0:
-            return False
-        success = False
-        #tags.append(len(boxConstraints))
 
+    def _fit(self, img, dot, tags, boxConstraints = []):
+        numFeatures = img.shape[1]
         if self._method == "rf-sklearn":
             from sklearn.ensemble import RandomForestRegressor as RFR
             
             regressor = RFR(n_estimators=self._ntrees,max_depth=self._maxdepth)
             regressor.fit(img, dot)
 
-            self._regressor = regressor
-            success = True
-
-        elif self._method == "svr-sklearn":
-            from sklearn.svm import SVR
-            regressor = SVR(kernel = self._kernel, C = self._C)
-            regressor.fit(img, dot)
-            self._regressor = regressor
-            success = True
-
         elif self._method == "svrBoxed-gurobi":
             regressor = RegressorGurobi(C = self._C, epsilon = self._epsilon)
             regressor.fit(img, dot, tags, self.getOldBoxConstraints(boxConstraints, numFeatures
                                                                    ))
-            self._regressor = regressor
-            success = True
         
         elif self._method == "svr-gurobi":
             regressor = RegressorGurobi(C = self._C, epsilon = self._epsilon)
             regressor.fit(img, dot)
-            self._regressor = regressor
-            success = True
             
         elif self._method == "svrBoxed-cplex":
             regressor = RegressorCplex(C = self._C, epsilon = self._epsilon)
             regressor.fit(img, dot, tags, boxConstraints)
-            self._regressor = regressor
-            success = True
 
-        if success:
-            self._numRegressors = 1
-        return success
-    
+        return regressor
+        
+
+
     def predict(self, oldImage, normalize = False):
         if self._numRegressors == 0:
             return np.zeros(oldImage.shape[:-1])
@@ -528,47 +524,16 @@ class SVR(object):
         image = np.copy(oldImage.reshape((-1, oldImage.shape[-1])))
         if normalize:
             image = sklearn.preprocessing.normalize(image, axis=0)
-        if self._method == "rf-sklearn":
-            if type(self._regressor) == list:
-                reslist = []
-                for r in self._regressor:
-                    reslist.append(r.predict(image))
-                res = np.dstack(reslist)
-                resShape = oldShape[:-1] + (len(self._regressor),)
-                #var = np.std(res, axis = 2)
-                #res = np.mean(res, axis = 2)
-            else:
-                res = self._regressor.predict(image)
-        elif self._method == "svr-sklearn":
-            res = self._regressor.predict(image)
-        elif self._method == "svrBoxed-gurobi":
-            if type(self._regressor) == list:
-                reslist = []
-                for r in self._regressor:
-                    reslist.append(r.predict(image))
-                res = np.dstack(reslist)
-                resShape = oldShape[:-1] + (len(self._regressor),)
-                #var = np.std(res, axis = 2)
-                #res = np.mean(res, axis = 2)
-            else:
-                res = self._regressor.predict(image)
-        elif self._method == "svrBoxed-cplex":
-            if type(self._regressor) == list:
-                reslist = []
-                for r in self._regressor:
-                    reslist.append(r.predict(image))
-                res = np.dstack(reslist)
-                resShape = oldShape[:-1] + (len(self._regressor),)
-                #var = np.std(res, axis = 2)
-                #res = np.mean(res, axis = 2)
-            else:
-                res = self._regressor.predict(image)
-        elif self._method == "svr-gurobi":
-            res = self._regressor.predict(image)
-
+       
+        reslist = []
+        for r in self._regressor:
+            reslist.append(r.predict(image))
+            res = np.dstack(reslist)
+            resShape = oldShape[:-1] + (len(self._regressor),)
+        
         #res = np.zeros(oldShape[:-1])
         res = res.view(np.ndarray)
-        res[np.where(res < 0)] = 0
+        res[res < 0] = 0
         return res.reshape(resShape)
 
     def writeHDF5(self, cachePath, targetname):
@@ -653,6 +618,7 @@ if __name__ == "__main__":
     boxIndices = np.array([0, 2500,5000])
     boxFeatures = np.array(img[:50,:100,:],dtype=np.float64)
     boxValues = np.array([15.0, 10.0])
+    boxFeatures = boxFeatures.reshape((-1, boxFeatures.shape[-1]))
     
     boxConstraints = {"boxValues": boxValues, "boxIndices" : boxIndices, "boxFeatures" :boxFeatures}
     #boxConstraints = None
@@ -661,9 +627,10 @@ if __name__ == "__main__":
     #boxConstraints = [(3, img[0:30,0:30,:])]
     #boxConstraints.reshape((-1, boxConstraints.shape[-1]))
     print testtags
+    numRegressors = 3
     success = Counter.fitPrepared(testimg[testmapping,:], testdot[testmapping], testtags,
-                                  boxConstraints = boxConstraints)
-    #success = Counter.fitPrepared(testimg[indices,:], testdot[indices], testtags[:len(indices)], epsilon = 0.000)
+                                  boxConstraints = None, numRegressors = numRegressors)
+    #3uccess = Counter.fitPrepared(testimg[indices,:], testdot[indices], testtags[:len(indices)], epsilon = 0.000)
     #print Counter.w, Counter.
     print "learning finished"
 
@@ -683,7 +650,7 @@ if __name__ == "__main__":
     print "prediction"
     #print img
     #print newdot
-    print "sum", np.sum(newdot)
+    print "sum", np.sum(newdot) / numRegressors
     #try: 
     #    import matplotlib.pyplot as plt
     #    import matplotlib
