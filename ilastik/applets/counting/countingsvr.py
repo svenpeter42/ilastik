@@ -78,7 +78,7 @@ class RegressorCplex(object):
         boxValues_p = None
         boxIndices_p = None
         boxFeatures_p = None
-
+        dens_p = None
         if type(boxConstraints) == dict:
             numConstraints = len(boxConstraints["boxValues"])
             boxValues = boxConstraints["boxValues"].astype(np.float64)
@@ -90,9 +90,16 @@ class RegressorCplex(object):
             assert(len(boxFeatures.shape) == 2)
             print boxIndices[-1], boxFeatures.shape[0]
             assert(boxIndices[-1] == boxFeatures.shape[0])
+            #self.dens = np.zeros((boxIndices[-1]), dtype = np.float64).reshape(-1, 1)
+            #dens_p = self.dens.ctypes.data_as(c_double_p)
 
         cplexwrapper.extlib.fit(X_p, Yl_p, w_p, ctypes.c_int(tags[0]), numRows, numCols, ctypes.c_double(self._C),
-                                ctypes.c_double(self._epsilon), numConstraints, boxValues_p, boxIndices_p, boxFeatures_p)
+                                ctypes.c_double(self._epsilon), numConstraints, boxValues_p, boxIndices_p,
+                                boxFeatures_p)#, dens_p)
+        #self.dens[np.where(self.dens < 0)] = 0
+        
+        #import sitecustomize
+        #sitecustomize.debug_trace()
 
     def predict(self, X):
         
@@ -100,6 +107,12 @@ class RegressorCplex(object):
         result = np.dot(self.get_Xhat(X.reshape((-1, X.shape[-1]))),self.w).reshape(X.shape[:-1])
         return result
 
+    def predictFiltered(self, X):
+        
+        oldShape = X.shape
+        result = np.dot(self.get_Xhat(X.reshape((-1, X.shape[-1]))),self.w).reshape(X.shape[:-1])
+        result[np.where(result < 0)] = 0
+        return result
 
 class RegressorGurobi(object):
     
@@ -394,6 +407,9 @@ class SVR(object):
         newImg, newDot, mapping, tags = \
         self.prepareData(img, dot, smooth, normalize)
         self.fitPrepared(newImg[mapping,:], newDot[mapping], tags)
+
+
+    def splitBoxConstraints(self, numRegressors, boxConstraints):
 
 
 
