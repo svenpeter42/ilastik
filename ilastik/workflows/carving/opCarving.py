@@ -14,6 +14,7 @@ from lazyflow.operators.valueProviders import OpValueCache
 #ilastik
 from ilastik.utility.timer import Timer
 from ilastik.applets.base.applet import DatasetConstraintError
+from ilastik.utility import bind
 
 #carving
 from cylemon.segmentation import MSTSegmentor
@@ -126,6 +127,13 @@ class OpCarving(Operator):
         self.MstOut.connect( self._opMstCache.Output )
 
         self.InputData.notifyReady( self._checkConstraints )
+        
+        self.opLabelArray.NonzeroBlocks.notifyDirty( bind(self._onNonzeroBlocks) )
+        
+    def _onNonzeroBlocks(self):
+        print "xxx _onNonzeroBlocks xxx"
+        nz = self.opLabelArray.NonzeroBlocks.value
+        print "yyy the value is ", nz
         
     def _checkConstraints(self, *args):
         slot = self.InputData
