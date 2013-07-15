@@ -61,7 +61,7 @@ class OpTrainCounter(Operator):
                             stype = "object"),
                   InputSlot("Ntrees", value = 10, stype = "int"), #RF parameter
                   InputSlot("MaxDepth", value =50, stype = "object"), #RF parameter, None means grow until purity
-                  InputSlot("BoxConstraints", stype = "list", optional = True)
+                  InputSlot("BoxConstraints", stype = "list", value = [])
                  ]
     outputSlots = [OutputSlot("Classifier")]
     options = SVR.options

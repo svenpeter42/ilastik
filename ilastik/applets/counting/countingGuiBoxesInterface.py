@@ -457,7 +457,7 @@ class CoupledRectangleElement(object):
         
         
         self._rectItem=QGraphicsResizableRect(x,y,h,w,scene,parent)
-        self._opsub = OpSubRegion(graph=inputSlot.operator.graph) #sub region correspondig to the rectangle region
+        self._opsub = OpSubRegion(graph=inputSlot.operator.graph, parent = inputSlot.operator.parent) #sub region correspondig to the rectangle region
         #self.opsum = OpSumAll(graph=inputSlot.operator.graph)
         self._graph=inputSlot.operator.graph
         self._inputSlot=inputSlot #input slot which connect to the sub array

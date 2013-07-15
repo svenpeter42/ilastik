@@ -284,7 +284,7 @@ class CountingGui(LabelingGui):
         self.op.Density.notifyDirty(updateSum)
 
         mainwin=self
-        self.density5d=Op5ifyer(graph=self.op.graph) #FIXME: Hack , get the proper reference to the graph
+        self.density5d=Op5ifyer(graph=self.op.graph, parent=self.op.parent) #FIXME: Hack , get the proper reference to the graph
         self.density5d.input.connect(self.op.Density)
         self.boxController=BoxController(mainwin.editor.imageScenes[2],self.density5d.output,self.labelingDrawerUi.boxListModel)       
         self.boxIntepreter=BoxInterpreter(mainwin.editor.navInterpret,mainwin.editor.posModel,self.boxController,mainwin.centralWidget())
@@ -460,15 +460,15 @@ class CountingGui(LabelingGui):
             self._changedSigma = False
             if hasattr(self, "predictionLayer"):
                 print "RESET"
-                self.predictionLayer.resetBounds()
+                #self.predictionLayer.resetBounds()
             self.op.opTrain.Sigma.setValue(sigma)
             if hasattr(self, "labelPreviewLayer"):
                 print "RESET"
-                self.labelPreviewLayer.resetBounds()
+                #self.labelPreviewLayer.resetBounds()
             self.op.LabelPreviewer.Sigma.setValue(sigma)
             if hasattr(self, "labelPreviewLayer"):
                 print "RESET"
-                self.labelPreviewLayer.resetBounds()
+                #self.labelPreviewLayer.resetBounds()
             
             self.changedSigma = False
 
