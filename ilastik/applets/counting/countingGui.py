@@ -172,7 +172,7 @@ class CountingGui(LabelingGui):
         self.editor.crosshairControler=self.dotcrosshairController
         self.dotController=DotController(self.editor.imageScenes[2],self.editor.brushingControler)
         self.editor.brushingInterpreter = DotInterpreter(self.editor.navCtrl,self.editor.brushingControler,self.dotController)
-        self.dotIntepreter=self.editor.brushingInterpreter
+        self.dotInterpreter=self.editor.brushingInterpreter
         
         
         #=======================================================================
@@ -287,13 +287,13 @@ class CountingGui(LabelingGui):
         self.density5d=Op5ifyer(graph=self.op.graph, parent=self.op.parent) #FIXME: Hack , get the proper reference to the graph
         self.density5d.input.connect(self.op.Density)
         self.boxController=BoxController(mainwin.editor.imageScenes[2],self.density5d.output,self.labelingDrawerUi.boxListModel)       
-        self.boxIntepreter=BoxInterpreter(mainwin.editor.navInterpret,mainwin.editor.posModel,self.boxController,mainwin.centralWidget())
+        self.boxInterpreter=BoxInterpreter(mainwin.editor.navInterpret,mainwin.editor.posModel,self.boxController,mainwin.centralWidget())
         
         
-        self.rubberbandClickReporter = self.boxIntepreter
+        self.rubberbandClickReporter = self.boxInterpreter
         self.rubberbandClickReporter.leftClickReleased.connect( self.handleBoxQuery )
         self.rubberbandClickReporter.leftClickReleased.connect(self._addNewBox)
-        self.navigationIntepreterDefault=self.editor.navInterpret
+        self.navigationInterpreterDefault=self.editor.navInterpret
 
         self.boxController.fixedBoxesChanged.connect(self._handleBoxConstraints)
     
@@ -495,7 +495,10 @@ class CountingGui(LabelingGui):
         
     
     def _handleBoxConstraints(self, constr):
-        self.op.opTrain.BoxConstraints.setValue(constr)
+        #import sitecustomize
+        #sitecustomize.debug_trace()
+        #self.op.opTrain.BoxConstraints.setValue(constr)
+        self.op.opTrain.BoxConstraints[self.op.current_view_index()].setValue(constr)
 
         #boxes = self.boxController._currentBoxesList
 
@@ -915,7 +918,7 @@ class CountingGui(LabelingGui):
         self._labelControlUi.arrowToolButton.setChecked(True)
 #         if not hasattr(self, "rubberbandClickReporter"):
 #             
-#             self.rubberbandClickReporter = self.boxIntepreter
+#             self.rubberbandClickReporter = self.boxInterpreter
 #             self.rubberbandClickReporter.leftClickReleased.connect( self.handleBoxQuery )
 #         self.editor.setNavigationInterpreter(self.rubberbandClickReporter)
     
@@ -1024,7 +1027,7 @@ class CountingGui(LabelingGui):
         
                 QApplication.setOverrideCursor(Qt.CrossCursor)
                 self.editor.brushingModel.setBrushSize(0)
-                self.editor.setNavigationInterpreter(self.boxIntepreter)
+                self.editor.setNavigationInterpreter(self.boxInterpreter)
                 self._gui_setBox()
 
         self.editor.setInteractionMode( modeNames[toolId] )

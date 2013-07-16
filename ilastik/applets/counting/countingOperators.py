@@ -60,7 +60,7 @@ class OpTrainCounter(Operator):
                             stype = "object"),
                   InputSlot("Ntrees", value = 10, stype = "int"), #RF parameter
                   InputSlot("MaxDepth", value =50, stype = "object"), #RF parameter, None means grow until purity
-                  InputSlot("BoxConstraints", stype = "list", value = [])
+                  InputSlot("BoxConstraints", level = 1, stype = "list", optional = True)
                  ]
     outputSlots = [OutputSlot("Classifier")]
     options = SVR.options
@@ -145,11 +145,14 @@ class OpTrainCounter(Operator):
         self.progressSignal(30)
 
 
+        boxConstraintList = []
         boxConstraints = None
         if self.BoxConstraints.ready():
-            constraints = self.BoxConstraints.value
-            if len(constraints) > 0:
-                boxConstraints = self.constructBoxConstraints(constraints)
+            for i, slot in enumerate(self.BoxConstraints):
+                for constr in slot.value:
+                    boxConstraintList.append((i, constr))
+            if len(boxConstraintList) > 0:
+                boxConstraints = self.constructBoxConstraints(boxConstraintList)
 
         self.progressSignal(50)
         result[0].fitPrepared(fullFeatMatrix, fullLabelsMatrix, tags = fullTags, boxConstraints = boxConstraints, numRegressors
@@ -172,7 +175,9 @@ class OpTrainCounter(Operator):
     
     def constructBoxConstraints(self, constraints):
         
-        shape = np.array([[stop - start for start, stop in zip(constr[0][1:-2], constr[1][1:-2])] for constr in
+        import sitecustomize
+        sitecustomize.debug_trace()
+        shape = np.array([[stop - start for start, stop in zip(constr[0][1:-2], constr[1][1:-2])] for _, constr in
                    constraints])
         taggedShape = self.Images[0].meta.getTaggedShape()
         numcols = taggedShape['c']
@@ -182,8 +187,7 @@ class OpTrainCounter(Operator):
         constraintindices = []
         constraintvalues =  []
         offset = 0
-        for constr in constraints:
-            imagenumber = 0 #TODO: pass information about the image number from the box constraints
+        for imagenumber, constr in constraints:
             slicing = [slice(start,stop) for start, stop in zip(constr[0][1:-2], constr[1][1:-2])]
             numrows = (slicing[0].stop - slicing[0].start) * (slicing[1].stop - slicing[1].start)
             slicing.append(slice(None)) 

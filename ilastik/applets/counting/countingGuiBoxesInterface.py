@@ -856,6 +856,8 @@ class BoxController(QObject):
         
     def _fixedBoxesChanged(self, *args):
         boxes = []
+        #import sitecustomize
+        #sitecustomize.debug_trace()
         for box, rect in zip(self.boxListModel._elements, self._currentBoxesList):
             if box.isFixed:
                 boxes.append([rect.getStart(), rect.getStop(), box._fixvalue])
