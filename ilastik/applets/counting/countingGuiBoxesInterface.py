@@ -339,7 +339,7 @@ class QGraphicsResizableRect(QGraphicsRectItem):
     
     def dataPos(self):
         dataPos = self.scene().scene2data.map(self.scenePos())
-        pos = [dataPos.x(), dataPos.y()]
+        pos = [int(dataPos.x()), int(dataPos.y())]
         return pos 
     
     def mouseMoveEvent(self,event):
@@ -766,7 +766,7 @@ class BoxInterpreter(QObject):
 
 class BoxController(QObject):
     
-    fixedBoxesChanged = pyqtSignal(list)
+    fixedBoxesChanged = pyqtSignal(dict)
 
     def __init__(self,scene,connectionInput,boxListModel):
         '''
@@ -855,12 +855,13 @@ class BoxController(QObject):
         self.currentColor=self._getNextBoxColor()
         
     def _fixedBoxesChanged(self, *args):
-        boxes = []
+        boxes = {"rois" : [], "values" : []}
         #import sitecustomize
         #sitecustomize.debug_trace()
         for box, rect in zip(self.boxListModel._elements, self._currentBoxesList):
             if box.isFixed:
-                boxes.append([rect.getStart(), rect.getStop(), box._fixvalue])
+                boxes["rois"].append([rect.getStart(), rect.getStop()])
+                boxes["values"].append(float(box._fixvalue.toDouble()[0]))
 
         self.fixedBoxesChanged.emit(boxes)
          

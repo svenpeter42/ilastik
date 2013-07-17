@@ -157,6 +157,31 @@ class SerialPredictionSlot(SerialSlot):
             opStreamer.InternalPath.setValue(datasetName)
             self.operator.PredictionsFromDisk[imageIndex].connect(opStreamer.OutputImage)
 
+class SerialBoxSlot(SerialSlot):
+    def __init__(self, slot, operator, inslot=None, name=None,
+                 subname=None, default=None, depends=None,
+                 selfdepends=True):
+        super(SerialBoxSlot, self).__init__(
+            slot, inslot, name, subname, default, depends, selfdepends
+        )
+        self.operator = operator
+        self.progressSignal = SimpleSignal() # Signature: emit(percentComplete)
+
+    def _serialize(self, group, name, multislot):
+        #create subgroups, one for every imagelane
+        BoxDir = group.create_group(self.name)
+        self.deserialize(group)
+        for i, slot in enumerate(multislot):
+            g = BoxDir.create_group(self.subname.format(i))
+
+            s = SerialListSlot(slot)
+            s.serialize(g)
+
+    def _deserialize(self, group, slot):
+        for imageIndex, datasetName in enumerate(group.keys()):
+            slot[imageIndex].setValue(group[datasetName][slot.name].value.tolist())
+        #self.op.opTrain.BoxConstraints[i].setValue(res[i])
+
 
 class CountingSerializer(AppletSerializer):
     """Encapsulate the serialization scheme for pixel classification
@@ -182,7 +207,13 @@ class CountingSerializer(AppletSerializer):
                                       operator.classifier_cache,
                                       name="CountingWrappers",
                                       subname="wrapper{:04d}"),
-                 self.predictionSlot]
+                 self.predictionSlot, 
+                 SerialBoxSlot(operator.opTrain.BoxConstraintRois,operator.opTrain,
+                              name="Rois",
+                               subname="rois{:04d}"),
+                 SerialBoxSlot(operator.opTrain.BoxConstraintValues,operator.opTrain,
+                              name="Values",
+                               subname="values{:04d}")]
 
 
         super(CountingSerializer, self).__init__(projectFileGroupName,

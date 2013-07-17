@@ -227,43 +227,6 @@ class CountingGui(LabelingGui):
 #             self.labelingDrawerUi.SVROptions.addItem(option["method"], (option,))
 #         
         
-        self._setUIParameters()
-        
-        self._connectUIParameters()
-        self.labelingDrawerUi.DebugButton.pressed.connect(self._debug)
-        #elf._updateSVROptions()
-        self.labelingDrawerUi.boxListView.resetEmptyMessage("no boxes defined yet")
-        #self.labelingDrawerUi.boxListView._colorDialog=BoxDialog()
-        #self.labelingDrawerUi.TrainButton.pressed.connect(self._train)
-        #self.labelingDrawerUi.PredictionButton.pressed.connect(self.updateDensitySum)
-        self.labelingDrawerUi.SVROptions.currentIndexChanged.connect(self._updateSVROptions)
-        #self.labelingDrawerUi.OverBox.valueChanged.connect(self._updateOverMult)
-        #self.labelingDrawerUi.UnderBox.valueChanged.connect(self._updateUnderMult)
-        self.labelingDrawerUi.CBox.valueChanged.connect(self._updateC)
-        self.labelingDrawerUi.SigmaLine.editingFinished.connect(self._updateSigma)
-#        self.labelingDrawerUi.SigmaLine.textChanged.connect(self._changedSigma)
-        self.labelingDrawerUi.EpsilonBox.valueChanged.connect(self._updateEpsilon)
-        self.labelingDrawerUi.MaxDepthBox.valueChanged.connect(self._updateMaxDepth)
-        self.labelingDrawerUi.NtreesBox.valueChanged.connect(self._updateNtrees)
-        
-
-        self._registerOperatorsToGuiCallbacks() 
-
-        
-        
-        self._updateNtrees()
-        self._updateMaxDepth()
-        
-        
-        self.changedSigma = False
-        
-        self.labelingDrawerUi.CountText.setReadOnly(True)
-        self.op.LabelPreviewer.Sigma.setValue(self.op.opTrain.Sigma.value)
-        
-        
-                
-
-        
         
         #=======================================================================
         # Init Boxes Interface
@@ -296,8 +259,19 @@ class CountingGui(LabelingGui):
         self.navigationInterpreterDefault=self.editor.navInterpret
 
         self.boxController.fixedBoxesChanged.connect(self._handleBoxConstraints)
-    
-    
+        
+        self._setUIParameters()
+        self._connectUIParameters()
+        
+
+        
+        self.labelingDrawerUi.CountText.setReadOnly(True)
+        self.op.LabelPreviewer.Sigma.setValue(self.op.opTrain.Sigma.value)
+        
+        
+                
+
+        
             
     
 
@@ -309,7 +283,7 @@ class CountingGui(LabelingGui):
         #=======================================================================
         
         self._changedSigma = True
-        #Debug interface only available otadvanced users
+        #Debug interface only available to advanced users
         self.labelingDrawerUi.DebugButton.pressed.connect(self._debug)
         #elf._updateSVROptions()
         self.labelingDrawerUi.boxListView.resetEmptyMessage("no boxes defined yet")
@@ -367,6 +341,24 @@ class CountingGui(LabelingGui):
             gui.SVROptions.setCurrentIndex(index)
             
         CallToGui(op.SelectedOption,_setoption)
+        idx = self.op.current_view_index()
+        op = self.op.opTrain
+        fix = op.fixClassifier.value
+        op.fixClassifier.setValue(True)
+
+        if len(op.BoxConstraintRois[idx].value) > 0:
+            #if fixed boxes are existent, make column visible
+            self.labelingDrawerUi.boxListView._table.setColumnHidden(self.boxController.boxListModel.ColumnID.Fix, False)
+        for i, constr in enumerate(zip(op.BoxConstraintRois[idx].value, op.BoxConstraintValues[idx].value)):
+            roi, val = constr
+            if type(roi) is not list or len(roi) is not 2:
+                continue
+            self.boxController.addNewBox(roi[0], roi[1])
+            boxIndex = self.boxController.boxListModel.index(i, self.boxController.boxListModel.ColumnID.Fix)
+            iconIndex = self.boxController.boxListModel.index(i, self.boxController.boxListModel.ColumnID.FixIcon)
+            self.boxController.boxListModel.setData(boxIndex,QVariant(val))
+        op.fixClassifier.setValue(fix)
+        
 
         
     def _setUIParameters(self):
@@ -470,7 +462,6 @@ class CountingGui(LabelingGui):
                 print "RESET"
                 #self.labelPreviewLayer.resetBounds()
             
-            self.changedSigma = False
 
 
     def _updateEpsilon(self):
@@ -495,10 +486,10 @@ class CountingGui(LabelingGui):
         
     
     def _handleBoxConstraints(self, constr):
-        #import sitecustomize
-        #sitecustomize.debug_trace()
         #self.op.opTrain.BoxConstraints.setValue(constr)
-        self.op.opTrain.BoxConstraints[self.op.current_view_index()].setValue(constr)
+        from ilastik.applets.base.appletSerializer import SerialListSlot
+        self.op.opTrain.BoxConstraintRois[self.op.current_view_index()].setValue(constr["rois"])
+        self.op.opTrain.BoxConstraintValues[self.op.current_view_index()].setValue(constr["values"])
 
         #boxes = self.boxController._currentBoxesList
 

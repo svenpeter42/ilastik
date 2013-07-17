@@ -170,7 +170,7 @@ class OpCounting( Operator ):
         self.opTrain.inputs['Images'].connect( self.CachedFeatureImages )
         #self.opTrain.inputs['MaxLabel'].connect( self.opMaxLabel.Output )
         self.opTrain.inputs["nonzeroLabelBlocks"].connect( self.opLabelPipeline.nonzeroBlocks )
-        self.opTrain.inputs['fixClassifier'].setValue( False )
+        self.opTrain.inputs['fixClassifier'].setValue( True )
 
         # Hook up the Classifier Cache
         # The classifier is cached here to allow serializers to force in
@@ -297,11 +297,13 @@ class OpCounting( Operator ):
         numLanes = len(self.InputImages)
         assert numLanes == laneIndex, "Image lanes must be appended."        
         self.InputImages.resize(numLanes+1)
-        self.opTrain.BoxConstraints.resize(numLanes + 1)
+        self.opTrain.BoxConstraintRois.resize(numLanes + 1)
+        self.opTrain.BoxConstraintValues.resize(numLanes + 1)
         
     def removeLane(self, laneIndex, finalLength):
         self.InputImages.removeSlot(laneIndex, finalLength)
-        self.opTrain.BoxConstraints.removeSlot(laneIndex, finalLength)
+        self.opTrain.BoxConstraintRois.removeSlot(laneIndex, finalLength)
+        self.opTrain.BoxConstraintValues.removeSlot(laneIndex, finalLength)
 
     def getLane(self, laneIndex):
         return OperatorSubView(self, laneIndex)
