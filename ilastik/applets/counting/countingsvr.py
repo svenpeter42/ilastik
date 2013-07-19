@@ -85,6 +85,9 @@ class RegressorCplex(object):
             boxIndices_p = boxIndices.ctypes.data_as(c_int_p)
             boxFeatures = boxConstraints["boxFeatures"].astype(np.float64)
             boxFeatures_p = boxFeatures.ctypes.data_as(c_double_p)
+            #filter out boxes of size 0
+            boxSizes = [boxIndices[i+1] - boxIndices[i] for i in range(len(boxValues))]
+            assert(np.count_nonzero(boxSizes) == len(boxValues))
             assert(len(boxFeatures.shape) == 2)
             print boxIndices[-1], boxFeatures.shape[0]
             assert(boxIndices[-1] == boxFeatures.shape[0])
@@ -92,6 +95,8 @@ class RegressorCplex(object):
             #dens_p = self.dens.ctypes.data_as(c_double_p)
         #print "constraints:", boxFeatures.shape[0]
 
+        #import sitecustomize
+        #sitecustomize.debug_trace()
         cplexwrapper.extlib.fit(X_p, Yl_p, w_p, ctypes.c_int(tags[0]), numRows, numCols, ctypes.c_double(self._C),
                                 ctypes.c_double(self._epsilon), numConstraints, boxValues_p, boxIndices_p,
                                 boxFeatures_p)#, dens_p)
@@ -425,9 +430,11 @@ class SVR(object):
             limit = boxIndices[j]
             for count, index in enumerate(split):
                 if index >= limit:
-                    subBoxIndices.append(count)
+                    if count != subBoxIndices[-1] and count != len(split):
+                        subBoxIndices.append(count)
                     j = j + 1
                     limit = boxIndices[j]
+
             subBoxIndices.append(len(split))
             for j, _ in enumerate(subBoxIndices[:-1]):
                 subVal = boxValues[j] * (subBoxIndices[j + 1] - subBoxIndices[j]) / (boxIndices[j + 1] - boxIndices[j])
@@ -487,6 +494,7 @@ class SVR(object):
     
 
     def _fit(self, img, dot, tags, boxConstraints = []):
+        
         numFeatures = img.shape[1]
         if self._method == "rf-sklearn":
             from sklearn.ensemble import RandomForestRegressor as RFR

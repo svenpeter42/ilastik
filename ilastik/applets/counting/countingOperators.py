@@ -57,8 +57,8 @@ class OpTrainCounter(Operator):
                   InputSlot("SelectedOption", stype = "object"),
                   InputSlot("Ntrees", stype = "int"), #RF parameter
                   InputSlot("MaxDepth", stype = "object"), #RF parameter, None means grow until purity
-                  InputSlot("BoxConstraintRois", level = 1, stype = "list"),
-                  InputSlot("BoxConstraintValues", level = 1, stype = "list")
+                  InputSlot("BoxConstraintRois", optional = True, level = 1, stype = "list"),
+                  InputSlot("BoxConstraintValues", optional = True, level = 1, stype = "list")
                  ]
     outputSlots = [OutputSlot("Classifier")]
     options = SVR.options
@@ -71,7 +71,6 @@ class OpTrainCounter(Operator):
         self.initInputs()
         self.Classifier.meta.dtype = object
         self.Classifier.meta.shape = (1,)
-        self.progressSignal = OrderedSignal()
 
     def initInputs(self):
         fix = False

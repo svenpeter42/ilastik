@@ -3,6 +3,7 @@ import os
 import logging
 import threading
 from functools import partial
+import math
 
 # Third-party
 import numpy
@@ -315,14 +316,14 @@ class CountingGui(LabelingGui):
         if op.BoxConstraintRois.ready() and len(op.BoxConstraintRois[idx].value) > 0:
             #if fixed boxes are existent, make column visible
             self.labelingDrawerUi.boxListView._table.setColumnHidden(self.boxController.boxListModel.ColumnID.Fix, False)
-        for i, constr in enumerate(zip(op.BoxConstraintRois[idx].value, op.BoxConstraintValues[idx].value)):
-            roi, val = constr
-            if type(roi) is not list or len(roi) is not 2:
-                continue
-            self.boxController.addNewBox(roi[0], roi[1])
-            boxIndex = self.boxController.boxListModel.index(i, self.boxController.boxListModel.ColumnID.Fix)
-            iconIndex = self.boxController.boxListModel.index(i, self.boxController.boxListModel.ColumnID.FixIcon)
-            self.boxController.boxListModel.setData(boxIndex,QVariant(val))
+            for i, constr in enumerate(zip(op.BoxConstraintRois[idx].value, op.BoxConstraintValues[idx].value)):
+                roi, val = constr
+                if type(roi) is not list or len(roi) is not 2:
+                    continue
+                self.boxController.addNewBox(roi[0], roi[1])
+                boxIndex = self.boxController.boxListModel.index(i, self.boxController.boxListModel.ColumnID.Fix)
+                iconIndex = self.boxController.boxListModel.index(i, self.boxController.boxListModel.ColumnID.FixIcon)
+                self.boxController.boxListModel.setData(boxIndex,QVariant(val))
         op.fixClassifier.setValue(fix)
         
 
@@ -409,25 +410,26 @@ class CountingGui(LabelingGui):
     def _updateSigma(self):
         if self._changedSigma:
 
+            sigma,_ = self._normalizeLayers()
+            self.editor.crosshairControler.setSigma(max(sigma))
+            #2 * the maximal value of a gaussian filter, to allow some leeway for overlapping
+            self.op.opTrain.Sigma.setValue(sigma)
+            self.op.LabelPreviewer.Sigma.setValue(sigma)
+            self._changedSigma = False
+            
+    def _normalizeLayers(self):
             sigma = [float(n) for n in
                            self._labelControlUi.SigmaLine.text().split(" ")]
-            
-            self.editor.crosshairControler.setSigma(sigma[0])
-            #self.dotController.setDotsRadius(sigma[0]*2)
-            self.op.opTrain.Sigma.setValue(sigma)
-            self._changedSigma = False
+            upperBound = 1.5 / (2 * math.pi * max(sigma)**2)
             if hasattr(self, "predictionLayer"):
+                self.predictionLayer.set_normalize(0,(0,upperBound))
+                
                 print "RESET"
-                #self.predictionLayer.resetBounds()
-            self.op.opTrain.Sigma.setValue(sigma)
+
             if hasattr(self, "labelPreviewLayer"):
-                print "RESET"
+                self.labelPreviewLayer.set_normalize(0,(0,upperBound))
                 #self.labelPreviewLayer.resetBounds()
-            self.op.LabelPreviewer.Sigma.setValue(sigma)
-            if hasattr(self, "labelPreviewLayer"):
-                print "RESET"
-                #self.labelPreviewLayer.resetBounds()
-            
+            return sigma, upperBound
 
 
     def _updateEpsilon(self):
@@ -538,8 +540,9 @@ class CountingGui(LabelingGui):
         for name, slot in slots.items():
             if slot.ready():
                 from volumina import colortables
-                layer = ColortableLayer(LazyflowSource(slot), colorTable = colortables.jetTransparent(), normalize =
-                                        (0,1))
+                sigma,upperBound = self._normalizeLayers()
+                layer = ColortableLayer(LazyflowSource(slot), colorTable = colortables.partlyJetTransparent(ratio=2./3), normalize =
+                                       (0,upperBound))
                 layer.name = name
                 layer.visible = self.labelingDrawerUi.liveUpdateButton.isChecked()
                 if layer.name == "LabelPreview":
