@@ -72,8 +72,6 @@ class RegressorCplex(object):
         
 
 
-        #import sitecustomize
-        #sitecustomize.debug_trace()
         numConstraints = 0
         boxValues_p = None
         boxIndices_p = None
@@ -99,8 +97,6 @@ class RegressorCplex(object):
                                 boxFeatures_p)#, dens_p)
         #self.dens[np.where(self.dens < 0)] = 0
         
-        #import sitecustomize
-        #sitecustomize.debug_trace()
 
     def predict(self, X):
         
@@ -227,8 +223,6 @@ class RegressorGurobi(object):
             isForegroundIndicators = []
 
             for i in range(len(boxConstraints)):
-                #import sitecustomize
-                #sitecustomize.debug_trace()
                 value, features = boxConstraints[i]
                 assert features.shape[1] == self.Nf
                 res = self.predict(features)
@@ -303,8 +297,8 @@ class SVR(object):
 
 
     options = [
-        {"method" : "svrBoxed-gurobi", "gui":["default", "svr"], "req":["gurobipy"]},
         {"method" : "svrBoxed-cplex", "gui":["default", "svr"], "req":["ilastik.applets.counting.cplexwrapper"]},
+        {"method" : "svrBoxed-gurobi", "gui":["default", "svr"], "req":["gurobipy"]},
         {"method" : "rf-sklearn" ,"gui":["default","rf"], "req":["sklearn"]},
         #{"optimization" : "svr-sklearn", "kernel" : "rbf","gui":["default","svr"], "req":["sklearn"]},
         {"method" : "svr-gurobi", "gui":["default", "svr"], "req":["gurobipy"]}
@@ -320,8 +314,8 @@ class SVR(object):
     ]
 
 
-    def __init__(self, method = options[0]["method"], Sigma = [2.5], C = 1, epsilon = 0.001, \
-                  ntrees=10, maxdepth=None, #RF parameters, maxdepth=None means grows untill purity
+    def __init__(self, method = options[0]["method"], Sigma = [2.5], C = 1, epsilon = 0.000, \
+                  ntrees=10, maxdepth=50, #RF parameters, maxdepth=None means grows until purity
                  **kwargs
                  ):
         """
@@ -450,18 +444,18 @@ class SVR(object):
 
 
     def fitPrepared(self, img, dot, tags, boxConstraints = [], numRegressors = 1):
-        self._regressor = []
+        self._regressor = [None for i in range(numRegressors)]
         numFeatures = img.shape[-1]
         numVariables = sum(img.shape[:-1])
+        self._numRegressors = numRegressors
         if numVariables == 0:
             return
        
         if numRegressors == 1:
             try:
-                self._regressor = [self._fit(img, dot, tags, boxConstraints)]
+                self._regressor[0] = self._fit(img, dot, tags, boxConstraints)
             except:
                 pass
-            self._numRegressors = len(self._regressor)
             return 
         
         splitBoxConstraints = self.splitBoxConstraints(numRegressors, boxConstraints)
@@ -481,8 +475,9 @@ class SVR(object):
 
             try:
                 regressor = self._fit(img[indices, :], dot[indices], newTags, newBoxConstraints)
-                self._regressor.append(regressor)
+                self._regressor[i] = regressor
             except RuntimeError as err:
+                logger.error("Error while training the regressor")
                 raise err
                 pass
 
@@ -517,8 +512,6 @@ class SVR(object):
 
 
     def predict(self, oldImage, normalize = False):
-        if self._numRegressors == 0:
-            return np.zeros(oldImage.shape[:-1])
         oldShape = oldImage.shape
         resShape = oldShape[:-1]
         image = np.copy(oldImage.reshape((-1, oldImage.shape[-1])))
@@ -527,7 +520,10 @@ class SVR(object):
        
         reslist = []
         for r in self._regressor:
-            reslist.append(r.predict(image))
+            if r is None:
+                reslist.append(np.zeros(oldImage.shape[:-1]))
+            else:
+                reslist.append(r.predict(image))
             res = np.dstack(reslist)
             resShape = oldShape[:-1] + (len(self._regressor),)
         
@@ -569,7 +565,8 @@ class SVR(object):
         for i, boxValue in enumerate(boxValues):
             slicing = slice(boxIndices[i], boxIndices[i + 1])
             valfeaturepair = (boxValue, boxFeatures[slicing,:])
-            boxConstraints.append(valfeaturepair)
+            if valfeaturepair[1].shape[0] > 0:
+                boxConstraints.append(valfeaturepair)
         return boxConstraints
 
 

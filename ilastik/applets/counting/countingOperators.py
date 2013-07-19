@@ -13,7 +13,6 @@ from lazyflow.utility import traceLogged
 
 from ilastik.applets.counting.countingsvr import SVR
 
-numRegressors = 4
 class OpLabelPreviewer(Operator):
     name = "LabelPreviewer"
     description = "Provides a Preview of the labels after gaussian smoothing"
@@ -52,31 +51,53 @@ class OpTrainCounter(Operator):
 
     inputSlots = [InputSlot("Images", level=1),InputSlot("Labels", level=1), InputSlot("fixClassifier", stype="bool"),
                   InputSlot("nonzeroLabelBlocks", level=1),
-                  InputSlot("Sigma", value = [2.5], stype = "object"), 
-                  InputSlot("Epsilon", value = 0, stype = "float"), 
-                  InputSlot("C", value = 1, stype = "float"), 
-                  InputSlot("SelectedOption", 
-                            value = SVR.options[0],
-                            stype = "object"),
-                  InputSlot("Ntrees", value = 10, stype = "int"), #RF parameter
-                  InputSlot("MaxDepth", value =50, stype = "object"), #RF parameter, None means grow until purity
-                  InputSlot("BoxConstraintRois", level = 1, stype = "list", value = []),
-                  InputSlot("BoxConstraintValues", level = 1, stype = "list", value = [])
+                  InputSlot("Sigma", stype = "object"), 
+                  InputSlot("Epsilon",  stype = "float"), 
+                  InputSlot("C",  stype = "float"), 
+                  InputSlot("SelectedOption", stype = "object"),
+                  InputSlot("Ntrees", stype = "int"), #RF parameter
+                  InputSlot("MaxDepth", stype = "object"), #RF parameter, None means grow until purity
+                  InputSlot("BoxConstraintRois", level = 1, stype = "list"),
+                  InputSlot("BoxConstraintValues", level = 1, stype = "list")
                  ]
     outputSlots = [OutputSlot("Classifier")]
     options = SVR.options
+    numRegressors = 4
 
     def __init__(self, *args, **kwargs):
         super(OpTrainCounter, self).__init__(*args, **kwargs)
         self.progressSignal = OrderedSignal()
         self._svr = SVR()
+        self.initInputs()
         self.Classifier.meta.dtype = object
         self.Classifier.meta.shape = (1,)
         self.progressSignal = OrderedSignal()
 
+    def initInputs(self):
+        fix = False
+        if self.fixClassifier.ready():
+            fix = self.fixClassifier.value
+        self.fixClassifier.setValue(True)
+        if hasattr(self, "_svr"):
+            params = self._svr.get_params()
+            self.Sigma.setValue(params["Sigma"])
+            self.Epsilon.setValue(params["epsilon"])
+            self.C.setValue(params["C"])
+            self.Ntrees.setValue(params["ntrees"])
+            self.MaxDepth.setValue(params["maxdepth"])
+            self.SelectedOption.setValue(params["method"])
+
+        self.fixClassifier.setValue(fix)
+
+
+
     def setupOutputs(self):
         if self.inputs["fixClassifier"].value == False:
-            params = {"method" : self.SelectedOption.value["method"],
+            method = self.SelectedOption.value
+            if type(method) is dict:
+                method = method["method"]
+            
+            params = {"method" : method,
                       "Sigma": self.Sigma.value,
                       "epsilon" : self.Epsilon.value,
                       "C" : self.C.value,
@@ -158,7 +179,7 @@ class OpTrainCounter(Operator):
 
             self.progressSignal(50)
             result[0].fitPrepared(fullFeatMatrix, fullLabelsMatrix, tags = fullTags, boxConstraints = boxConstraints, numRegressors
-                         = numRegressors)
+                         = self.numRegressors)
             try:
                 pass
             #req = pool.request(partial(result[0].fitPrepared, featMatrix, labelsMatrix, tagsMatrix, self.Epsilon.value))
@@ -179,34 +200,41 @@ class OpTrainCounter(Operator):
         
         #import sitecustomize
         #sitecustomize.debug_trace()
-        shape = np.array([[stop - start for start, stop in zip(constr[0][1:-2], constr[1][1:-2])] for _, constr,_ in
-                   constraints])
-        taggedShape = self.Images[0].meta.getTaggedShape()
-        numcols = taggedShape['c']
-        shape = shape[:,0] * shape[:,1]
-        shape = np.sum(shape,axis = 0)
-        constraintmatrix = np.ndarray(shape = (shape, numcols))
-        constraintindices = []
-        constraintvalues =  []
-        offset = 0
-        for imagenumber, constr, value in constraints:
-            slicing = [slice(start,stop) for start, stop in zip(constr[0][1:-2], constr[1][1:-2])]
-            numrows = (slicing[0].stop - slicing[0].start) * (slicing[1].stop - slicing[1].start)
-            slicing.append(slice(None)) 
-            slicing = tuple(slicing)
 
-            constraintmatrix[offset:offset + numrows,:] = self.Images[imagenumber][slicing].wait().reshape((numrows,
-                                                                                                  -1))
+        
+        try:
+            shape = np.array([[stop - start for start, stop in zip(constr[0][1:-2], constr[1][1:-2])] for _, constr,_ in
+                       constraints])
+            taggedShape = self.Images[0].meta.getTaggedShape()
+            numcols = taggedShape['c']
+            shape = shape[:,0] * shape[:,1]
+            shape = np.sum(shape,axis = 0)
+            constraintmatrix = np.ndarray(shape = (shape, numcols))
+            constraintindices = []
+            constraintvalues =  []
+            offset = 0
+            for imagenumber, constr, value in constraints:
+                    slicing = [slice(start,stop) for start, stop in zip(constr[0][1:-2], constr[1][1:-2])]
+                    numrows = (slicing[0].stop - slicing[0].start) * (slicing[1].stop - slicing[1].start)
+                    slicing.append(slice(None)) 
+                    slicing = tuple(slicing)
+
+                    constraintmatrix[offset:offset + numrows,:] = self.Images[imagenumber][slicing].wait().reshape((numrows,
+                                                                                                          -1))
+                    constraintindices.append(offset)
+                    constraintvalues.append(value)
+                    offset = offset + numrows
             constraintindices.append(offset)
-            constraintvalues.append(value)
-            offset = offset + numrows
-        constraintindices.append(offset)
 
-        constraintvalues = np.array(constraintvalues, np.float64)
-        constraintindices = np.array(constraintindices, np.int)
+            constraintvalues = np.array(constraintvalues, np.float64)
+            constraintindices = np.array(constraintindices, np.int)
 
-        boxConstraints = {"boxFeatures" : constraintmatrix, "boxValues" : constraintvalues, "boxIndices" :
-                          constraintindices}
+            boxConstraints = {"boxFeatures" : constraintmatrix, "boxValues" : constraintvalues, "boxIndices" :
+                              constraintindices}
+        except:
+            boxConstraints = None
+            logger.error("An error has occured with the box Constraints: {} ".format(constraints))
+        
         return boxConstraints
 
 
@@ -224,7 +252,7 @@ class OpPredictCounter(Operator):
         nlabels=self.inputs["LabelsCount"].value
         self.PMaps.meta.dtype = np.float32
         self.PMaps.meta.axistags = copy.copy(self.Image.meta.axistags)
-        self.PMaps.meta.shape = self.Image.meta.shape[:-1] + (max(1, self.Classifier.value._numRegressors),) # FIXME: This assumes that channel is the last axis
+        self.PMaps.meta.shape = self.Image.meta.shape[:-1] + (OpTrainCounter.numRegressors,) # FIXME: This assumes that channel is the last axis
         self.PMaps.meta.drange = (0.0, 1.0)
 
     def execute(self, slot, subindex, roi, result):
@@ -287,7 +315,11 @@ class OpPredictCounter(Operator):
         
 
         predictions[0] = forests[0].predict(np.asarray(features, dtype = np.float32), normalize = False)
-        predictions[0] = predictions[0].reshape(result.shape)
+        try:
+            predictions[0] = predictions[0].reshape(result.shape)
+        except:
+            import sitecustomize
+            sitecustomize.debug_trace()
         result[...] = predictions[0]
         # If our LabelsCount is higher than the number of labels in the training set,
         # then our results aren't really valid.  FIXME !!!
