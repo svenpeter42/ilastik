@@ -420,12 +420,10 @@ class CountingGui(LabelingGui):
     def _normalizeLayers(self):
             sigma = [float(n) for n in
                            self._labelControlUi.SigmaLine.text().split(" ")]
-            upperBound = 1.5 / (2 * math.pi * max(sigma)**2)
+            upperBound = 3 / (2 * math.pi * max(sigma)**2)
             if hasattr(self, "predictionLayer"):
                 self.predictionLayer.set_normalize(0,(0,upperBound))
                 
-                print "RESET"
-
             if hasattr(self, "labelPreviewLayer"):
                 self.labelPreviewLayer.set_normalize(0,(0,upperBound))
                 #self.labelPreviewLayer.resetBounds()

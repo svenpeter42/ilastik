@@ -473,6 +473,7 @@ class OpPredictionPipeline(OpPredictionPipelineNoCache):
         self.prediction_cache_gui.name = "prediction_cache_gui"
         self.prediction_cache_gui.inputs["fixAtCurrent"].connect( self.FreezePredictions )
         self.prediction_cache_gui.inputs["Input"].connect( self.predict.PMaps )
+        self.prediction_cache_gui.blockShape.setValue(128)
         
         ## Also provide each prediction channel as a separate layer (for the GUI)
         self.opUncertaintyEstimator = OpEnsembleMargin( parent=self )
@@ -481,6 +482,7 @@ class OpPredictionPipeline(OpPredictionPipelineNoCache):
         ## Cache the uncertainty so we get zeros for uncomputed points
         self.opUncertaintyCache = OpArrayCache( parent=self )
         self.opUncertaintyCache.name = "opUncertaintyCache"
+        self.opUncertaintyCache.blockShape.setValue(128)
         self.opUncertaintyCache.Input.connect( self.opUncertaintyEstimator.Output )
         self.opUncertaintyCache.fixAtCurrent.connect( self.FreezePredictions )
         self.UncertaintyEstimate.connect( self.opUncertaintyCache.Output )
