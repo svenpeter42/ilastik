@@ -68,23 +68,22 @@ class OpTrainCounter(Operator):
         super(OpTrainCounter, self).__init__(*args, **kwargs)
         self.progressSignal = OrderedSignal()
         self._svr = SVR()
-        self.initInputs()
+        params = self._svr.get_params()
+        self.initInputs(params)
         self.Classifier.meta.dtype = object
         self.Classifier.meta.shape = (1,)
 
-    def initInputs(self):
+    def initInputs(self, params):
         fix = False
         if self.fixClassifier.ready():
             fix = self.fixClassifier.value
         self.fixClassifier.setValue(True)
-        if hasattr(self, "_svr"):
-            params = self._svr.get_params()
-            self.Sigma.setValue(params["Sigma"])
-            self.Epsilon.setValue(params["epsilon"])
-            self.C.setValue(params["C"])
-            self.Ntrees.setValue(params["ntrees"])
-            self.MaxDepth.setValue(params["maxdepth"])
-            self.SelectedOption.setValue(params["method"])
+        self.Sigma.setValue(params["Sigma"])
+        self.Epsilon.setValue(params["epsilon"])
+        self.C.setValue(params["C"])
+        self.Ntrees.setValue(params["ntrees"])
+        self.MaxDepth.setValue(params["maxdepth"])
+        self.SelectedOption.setValue(params["method"])
 
         self.fixClassifier.setValue(fix)
 
@@ -197,8 +196,6 @@ class OpTrainCounter(Operator):
     
     def constructBoxConstraints(self, constraints):
         
-        #import sitecustomize
-        #sitecustomize.debug_trace()
 
         
         try:
@@ -304,8 +301,6 @@ class OpPredictCounter(Operator):
         #prediction.shape =  shape[:-1] + (forests[0].labelCount(),)
         #prediction = prediction.reshape(*(shape[:-1] + (forests[0].labelCount(),)))
         
-        #import sitecustomize
-        #sitecustomize.debug_trace()
 
         #result[...] = 0
         #for i,p in enumerate(predictions):
@@ -314,11 +309,7 @@ class OpPredictCounter(Operator):
         
 
         predictions[0] = forests[0].predict(np.asarray(features, dtype = np.float32), normalize = False)
-        try:
-            predictions[0] = predictions[0].reshape(result.shape)
-        except:
-            import sitecustomize
-            sitecustomize.debug_trace()
+        predictions[0] = predictions[0].reshape(result.shape)
         result[...] = predictions[0]
         # If our LabelsCount is higher than the number of labels in the training set,
         # then our results aren't really valid.  FIXME !!!

@@ -361,6 +361,11 @@ class CountingGui(LabelingGui):
             MaxDepth = params["maxdepth"]
             _ind = self.labelingDrawerUi.SVROptions.findText(params["method"])
         
+            #set opTrain from parameters
+            self.op.opTrain.initInputs(params) 
+
+
+
         else:
             #read parameters from opTrain Operator
             Sigma = self.op.opTrain.Sigma.value
@@ -377,6 +382,7 @@ class CountingGui(LabelingGui):
         self.labelingDrawerUi.NtreesBox.setValue(Ntrees)
         self.labelingDrawerUi.MaxDepthBox.setValue(MaxDepth)
         self.labelingDrawerUi.SVROptions.setCurrentIndex(_ind)
+
         self._hideParameters()
         
         
@@ -543,11 +549,6 @@ class CountingGui(LabelingGui):
                                        (0,upperBound))
                 layer.name = name
                 layer.visible = self.labelingDrawerUi.liveUpdateButton.isChecked()
-                if layer.name == "LabelPreview":
-                    layer.visible = True
-                    self.labelPreviewLayer = layer
-                if layer.name == "Prediction":
-                    self.predictionLayer = layer
                 #layer.visibleChanged.connect(self.updateShowPredictionCheckbox)
                 layers.append(layer)
 
@@ -594,6 +595,9 @@ class CountingGui(LabelingGui):
         self.handleLabelSelectionChange()
         return layers
 
+
+
+
     @traceLogged(traceLogger)
     def toggleInteractive(self, checked):
         """
@@ -629,6 +633,17 @@ class CountingGui(LabelingGui):
         self.interactiveModeActive = checked
         
             
+    @traceLogged(traceLogger)
+    def updateAllLayers(self, slot=None):
+        super(CountingGui, self).updateAllLayers()
+        for layer in self.layerstack:
+            if layer.name == "LabelPreview":
+                layer.visible = True
+                self.labelPreviewLayer = layer
+            if layer.name == "Prediction":
+                self.predictionLayer = layer
+
+
     
     @pyqtSlot()
     @traceLogged(traceLogger)
