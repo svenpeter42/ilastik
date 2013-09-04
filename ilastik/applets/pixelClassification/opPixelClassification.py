@@ -12,6 +12,7 @@ from lazyflow.operators import OpBlockedSparseLabelArray, OpValueCache, OpTrainR
                                OpPredictRandomForest, OpSlicedBlockedArrayCache, OpMultiArraySlicer2, \
                                OpPixelOperator, OpMaxChannelIndicatorOperator
 
+from lazyflow.operators.opBlockedLabelArray import OpBlockedLabelArray
 #ilastik
 from ilastik.applets.base.applet import DatasetConstraintError
 from ilastik.utility.operatorSubView import OperatorSubView
@@ -246,9 +247,10 @@ class OpLabelPipeline( Operator ):
         self.opInputShapeReader = OpShapeReader( parent=self )
         self.opInputShapeReader.Input.connect( self.RawImage )
         
-        self.opLabelArray = OpBlockedSparseLabelArray( parent=self )
+        #self.opLabelArray = OpBlockedSparseLabelArray( parent=self )
+        self.opLabelArray = OpBlockedLabelArray( parent=self )        
         self.opLabelArray.Input.connect( self.LabelInput )
-        self.opLabelArray.shape.connect( self.opInputShapeReader.OutputShape )
+        #self.opLabelArray.shape.connect( self.opInputShapeReader.OutputShape )
         self.opLabelArray.eraser.setValue(100)
 
         # Initialize the delete input to -1, which means "no label".
