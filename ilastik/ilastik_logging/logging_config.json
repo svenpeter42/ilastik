@@ -16,6 +16,7 @@
         
         "lazyflow.operators.opArrayCache.OpArrayCache":                           { "level":"INFO" },
         "lazyflow.operators.opBlockedArrayCache.OpBlockedArrayCache":             { "level":"INFO" },
+        "lazyflow.operators.opCxxBlockedArrayCache":                              { "level":"INFO" },
         "lazyflow.operators.opSlicedBlockedArrayCache.OpSlicedBlockedArrayCache": { "level":"INFO" },
         "lazyflow.operators.opCompressedCache.OpCompressedCache":                 { "level":"DEBUG" },
         
@@ -33,10 +34,12 @@
         "lazyflow.operators.ioOperators.ioOperators.OpH5WriterBigDataset":  	{ "level":"INFO" },
         "lazyflow.operators.classifierOperators":                   { "level":"INFO" },
         "lazyflow.operators.opCompressedCache":                     { "level":"INFO" },
+        "lazyflow.operators.opBlockedLabelArray":                   { "level":"INFO" },
         "lazyflow.utility.io.RESTfulVolume":                        { "level":"INFO" },
         "ilastik":                                                  { "level":"INFO" },
         "ilastik.clusterOps":                                       { "level":"INFO" },
         "ilastik.applets":                                          { "level":"INFO" },
+        "ilastik.applets.base.appletSerializer":                    { "level":"INFO" },
         "ilastik.applets.dataSelection":                            { "level":"INFO" },
         "ilastik.applets.pixelClassification":                      { "level":"INFO" },
         "ilastik.applets.thresholdTwoLevels":                       { "level":"INFO" },
