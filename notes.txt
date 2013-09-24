@@ -1,0 +1,16 @@
+Who knows when an applet is uninitialized?  The operator.
+Most applets are considered "ready" iff they have at least one input lane that is fully ready.
+...but the exact 'ready' criteria will differ from applet to applet.
+
+It seems like there shouldn't be a "one-size-fits-all" "state" enumeration for all applets to stick to.
+Instead, the workflow should be aware of the particular API exposed by each of the applets that he owns,
+and he should be capable of determining whether or not an applet is "ready" or "busy" or whatever based
+on an informed inspection of the applet's top-level operator and/or gui and/or serializer.
+
+Then he can enable/disable upstream/downstream applets as appropriate.
+
+So the big question is still:
+WHEN should the workflow be "poked" to re-inspect all of the applets?
+
+- when explicitly signaled by the applet operator and/or gui?
+- when the applet's top-level operator's setupOutputs() functionn is called?
