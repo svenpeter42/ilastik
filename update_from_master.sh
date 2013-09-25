@@ -17,6 +17,7 @@ cd ..
 git checkout gh-pages
 mv html/* .
 rm -rf html
+rm -rf docs
 git add .
 git commit -m "Added new docs (built from ${branch})"
 
