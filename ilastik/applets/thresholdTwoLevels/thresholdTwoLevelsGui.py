@@ -8,9 +8,11 @@ from PyQt4.QtGui import QColor
 from PyQt4.QtGui import QMessageBox
 
 from volumina.api import LazyflowSource, AlphaModulatedLayer, ColortableLayer
+from volumina.colortables import create_default_16bit
 from ilastik.applets.layerViewer.layerViewerGui import LayerViewerGui
 from ilastik.utility import bind
-from ilastik.utility.gui import threadRouted
+from ilastik.utility.gui import threadRouted 
+from lazyflow.operators.generic import OpSingleChannelSelector
 
 logger = logging.getLogger(__name__)
 traceLogger = logging.getLogger("TRACE." + __name__)
@@ -120,6 +122,11 @@ class ThresholdTwoLevelsGui( LayerViewerGui ):
         block_shape_dict['x'] = self._sigmaSpinBoxes['x'].value()
         block_shape_dict['y'] = self._sigmaSpinBoxes['y'].value()
         block_shape_dict['z'] = self._sigmaSpinBoxes['z'].value()
+        if (block_shape_dict['x']<0.1) != (block_shape_dict['y']<0.1):
+            mexBox = QMessageBox()
+            mexBox.setText("One of the smoothing sigma values is 0. Reset it to a value > 0.1 or set all sigmas to 0 for no smoothing.")
+            mexBox.exec_()
+            return
 
         # Read Thresholds
         singleThreshold = self._drawer.thresholdSpinBox.value()
@@ -191,19 +198,38 @@ class ThresholdTwoLevelsGui( LayerViewerGui ):
         op = self.topLevelOperatorView
         binct = [QColor(Qt.black), QColor(Qt.white)]
         binct[0] = 0
-        ct = self._createDefault16ColorColorTable()
+        ct = create_default_16bit()
         ct[0]=0
         # Show the cached output, since it goes through a blocked cache
         
         if op.CachedOutput.ready():
             outputSrc = LazyflowSource(op.CachedOutput)
-            outputLayer = ColortableLayer(outputSrc, binct)
+            outputLayer = ColortableLayer(outputSrc, ct)
             outputLayer.name = "Final output"
             outputLayer.visible = False
             outputLayer.opacity = 1.0
             outputLayer.setToolTip("Results of thresholding and size filter")
             layers.append(outputLayer)
-
+            
+        if op.InputImage.ready():
+            numChannels = op.InputImage.meta.getTaggedShape()['c']
+            
+            for channel in range(numChannels):
+                channelProvider = OpSingleChannelSelector(parent=op.InputImage.getRealOperator().parent)
+                channelProvider.Input.connect(op.InputImage)
+                channelProvider.Index.setValue( channel )
+                channelSrc = LazyflowSource( channelProvider.Output )
+                inputChannelLayer = AlphaModulatedLayer( channelSrc,
+                                                    tintColor=QColor(self._channelColors[channel]),
+                                                    range=(0.0, 1.0),
+                                                    normalize=(0.0, 1.0) )
+                inputChannelLayer.opacity = 0.5
+                inputChannelLayer.visible = True
+                inputChannelLayer.name = "Input Channel " + str(channel)
+                inputChannelLayer.setToolTip("Select input channel " + str(channel) + \
+                                             " if this prediction image contains the objects of interest.")                    
+                layers.append(inputChannelLayer)
+                
         if self._showDebug:
             #FIXME: We have to do that, because lazyflow doesn't have a way to make an operator partially ready
             curIndex = self._drawer.tabWidget.currentIndex()
@@ -252,25 +278,7 @@ class ThresholdTwoLevelsGui( LayerViewerGui ):
                 smoothedLayer.opacity = 1.0
                 smoothedLayer.setToolTip("Selected channel data, smoothed with a Gaussian with user-defined sigma")
                 layers.append(smoothedLayer)
-        
-        # Show the selected channel
-        if op.InputChannel.ready():
-            drange = op.InputChannel.meta.drange
-            if drange is None:
-                drange = (0.0, 1.0)
-            channelSrc = LazyflowSource(op.InputChannel)
-            
-            #channelLayer = AlphaModulatedLayer( channelSrc,
-            #                                    tintColor=QColor(self._channelColors[op.Channel.value]),
-            #                                    range=drange,
-            #                                    normalize=drange )
-            #it used to be set to the label color, but people found it confusing
-            channelLayer = AlphaModulatedLayer( channelSrc, tintColor = QColor(Qt.white), range = drange, normalize=drange)
-            channelLayer.name = "Selected input channel"
-            channelLayer.opacity = 1.0
-            channelLayer.setToolTip("The selected channel of the prediction images")
-            #channelLayer.visible = channelIndex == op.Channel.value # By default, only the selected input channel is visible.    
-            layers.append(channelLayer)
+                
         
         # Show the raw input data
         rawSlot = self.topLevelOperatorView.RawInput
@@ -283,6 +291,7 @@ class ThresholdTwoLevelsGui( LayerViewerGui ):
 
         return layers
 
+    #FIXME: why do we do it here? why not take the one from volumina?
     def _createDefault16ColorColorTable(self):
         colors = []
 

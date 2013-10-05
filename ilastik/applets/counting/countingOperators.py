@@ -5,63 +5,68 @@ traceLogger = logging.getLogger("TRACE." + __name__)
 import numpy as np
 import time
 import copy
+import importlib
 from functools import partial
 
 from lazyflow.graph import Operator, InputSlot, OutputSlot, OrderedSignal
 from lazyflow.request import Request, RequestPool
 from lazyflow.utility import traceLogged
+from lazyflow.operators import OpPixelOperator
 
 from ilastik.applets.counting.countingsvr import SVR
 
-class OpLabelPreviewer(Operator):
+
+
+from lazyflow.operators.imgFilterOperators import OpGaussianSmoothing
+
+class OpLabelPreviewer(OpGaussianSmoothing):
     name = "LabelPreviewer"
-    description = "Provides a Preview of the labels after gaussian smoothing"
 
-    inputSlots = [InputSlot("Labels"),
-                 InputSlot("Sigma", stype = "object")]
-    outputSlots = [OutputSlot("Output")]
+class OpLabelPreviewerRefactored(Operator):
 
-    def __init__(self, *args, **kwargs):
-        super(OpLabelPreviewer, self).__init__(*args, **kwargs)
-        self._svr = SVR()
+    name = "LabelPreviewer"
 
-    def setupOutputs(self):
-        self.Output.meta.assignFrom(self.Labels.meta)
-        self.Output.meta.dtype = np.float32
-        self.Output.meta.drange = (0.0, 1.0)
+    inputSlots = [InputSlot("Images", level=1)]
+    outputSlots = [OutputSlot("Output", level=1)]
 
-    @traceLogged(logger, level=logging.INFO, msg="OpTrainCounter: Training Counting Regressor")
-    def execute(self, slot, subindex, roi, result):
-        progress = 0
-        
-        key = roi.toSlice()
-        dot=self.Labels[key].wait()
-        self._svr.set_params(Sigma = self.Sigma.value)
 
-        result[...] = self._svr.smoothLabels(dot)[0]
-        return result
-    
-    def propagateDirty(self, slot, subindex, roi):
-        self.Output.setDirty((slice(None)))
+
+
+
+
+def checkOption(reqlist):
+    for req in reqlist:
+        try:
+            importlib.import_module(req)
+        except:
+            return False
+    return True
+
+
 
 class OpTrainCounter(Operator):
     name = "TrainCounter"
     description = "Train a random forest on multiple images"
     category = "Learning"
 
-    inputSlots = [InputSlot("Images", level=1),InputSlot("Labels", level=1), InputSlot("fixClassifier", stype="bool"),
+    inputSlots = [InputSlot("Images", level=1),
+                  InputSlot("ForegroundLabels", level=1), 
+                  InputSlot("BackgroundLabels", level=1),
+                  InputSlot("fixClassifier", stype="bool"),
                   InputSlot("nonzeroLabelBlocks", level=1),
-                  InputSlot("Sigma", stype = "object"), 
+                  InputSlot("Sigma", stype = "float"), 
                   InputSlot("Epsilon",  stype = "float"), 
                   InputSlot("C",  stype = "float"), 
                   InputSlot("SelectedOption", stype = "object"),
                   InputSlot("Ntrees", stype = "int"), #RF parameter
                   InputSlot("MaxDepth", stype = "object"), #RF parameter, None means grow until purity
                   InputSlot("BoxConstraintRois", level = 1, stype = "list", value = []),
-                  InputSlot("BoxConstraintValues", level = 1, stype = "list", value = [])
+                  InputSlot("BoxConstraintValues", level = 1, stype = "list", value = []),
+                  InputSlot("UpperBound")
                  ]
     outputSlots = [OutputSlot("Classifier")]
     options = SVR.options
+    availableOptions = [checkOption(option["req"]) for option in SVR.options]
     numRegressors = 4
 
     def __init__(self, *args, **kwargs):
@@ -87,8 +92,6 @@ class OpTrainCounter(Operator):
 
         self.fixClassifier.setValue(fix)
 
-
-
     def setupOutputs(self):
         if self.inputs["fixClassifier"].value == False:
             method = self.SelectedOption.value
@@ -111,150 +114,161 @@ class OpTrainCounter(Operator):
 
     #@traceLogged(logger, level=logging.INFO, msg="OpTrainCounter: Training Counting Regressor")
     def execute(self, slot, subindex, roi, result):
-        if slot == self.Classifier:
-            progress = 0
-            numImages = len(self.Images)
-            self.progressSignal(progress)
-            featMatrix=[]
-            labelsMatrix=[]
-            tagList = []
 
-            
-            #result[0] = self._svr
+        progress = 0
+        numImages = len(self.Images)
+        self.progressSignal(progress)
+        featMatrix=[]
+        labelsMatrix=[]
+        tagList = []
 
-            for i,labels in enumerate(self.inputs["Labels"]):
-                if labels.meta.shape is not None:
-                    blocks = self.inputs["nonzeroLabelBlocks"][i][0].wait()
-                    
-                    reqlistlabels = []
-                    reqlistfeat = []
-                    progress += 10 / numImages
-                    self.progressSignal(progress)
-                    
-                    for b in blocks[0]:
-                        request = labels[b]
-                        featurekey = list(b)
-                        featurekey[-1] = slice(None, None, None)
-                        request2 = self.Images[i][featurekey]
-                        reqlistlabels.append(request)
-                        reqlistfeat.append(request2)
+        
+        #result[0] = self._svr
 
-                    traceLogger.debug("Requests prepared")
-
-                    numLabelBlocks = len(reqlistlabels)
-                    progress_outer = [progress]
-                    if numLabelBlocks > 0:
-                        progressInc = (80 - 10)/(numLabelBlocks * numImages)
-
-                    def progressNotify(req):
-                        progress_outer[0] += progressInc/2
-                        self.progressSignal(progress_outer[0])
-
-                    for ir, req in enumerate(reqlistfeat):
-                        image = req.notify_finished(progressNotify)
-
-                    for ir, req in enumerate(reqlistlabels):
-                        labblock = req.notify_finished(progressNotify)
-
-                    traceLogger.debug("Requests fired")
-                    
-
-                    #Fixme: Maybe later request only part of the region?
-
-                    #image=self.inputs["Images"][i][:].wait()
-                    for ir, req in enumerate(reqlistlabels):
-                        
-                        labblock = req.wait()
-                        if len(self.Sigma.value) > 1:
-                            labblock = labblock.reshape(labblock.shape[0:len(self.Sigma.value)])
-                        image = reqlistfeat[ir].wait()
-                        labblock = labblock.reshape((image.shape[:-1]))
-                        image = image.reshape((-1, image.shape[-1]))
-                        
-                        newDot, mapping, tags = \
-                        self._svr.prepareData(labblock, smooth = True)
-
-                        labels   = newDot[mapping]
-                        features = image[mapping]
-
-                        featMatrix.append(features)
-                        labelsMatrix.append(labels)
-                        tagList.append(tags)
-                    
-                    progress = progress_outer[0]
-
-                    traceLogger.debug("Requests processed")
-
-
-            self.progressSignal(80 / numImages)
-            if len(featMatrix) == 0 or len(labelsMatrix) == 0:
-                result[:] = None
-
-            else:
-                posTags = [tag[0] for tag in tagList]
-                negTags = [tag[1] for tag in tagList]
-                numPosTags = np.sum(posTags)
-                numTags = np.sum(posTags) + np.sum(negTags)
-                fullFeatMatrix = np.ndarray((numTags, self.Images[0].meta.shape[-1]), dtype = np.float64)
-                fullLabelsMatrix = np.ndarray((numTags), dtype = np.float64)
-                fullFeatMatrix[:] = np.NAN
-                fullLabelsMatrix[:] = np.NAN
-                currPosCount = 0
-                currNegCount = numPosTags
-                for i, posCount in enumerate(posTags):
-                    fullFeatMatrix[currPosCount:currPosCount + posTags[i],:] = featMatrix[i][:posCount,:]
-                    fullLabelsMatrix[currPosCount:currPosCount + posTags[i]] = labelsMatrix[i][:posCount]
-                    fullFeatMatrix[currNegCount:currNegCount + negTags[i],:] = featMatrix[i][posCount:,:]
-                    fullLabelsMatrix[currNegCount:currNegCount + negTags[i]] = labelsMatrix[i][posCount:]
-                    currPosCount += posTags[i]
-                    currNegCount += negTags[i]
-
-
-                assert(not np.isnan(np.sum(fullFeatMatrix)))
-
-                fullTags = [np.sum(posTags), np.sum(negTags)]
-                #pool = RequestPool()
-
-
-
-                boxConstraintList = []
-                boxConstraints = None
-                if self.BoxConstraintRois.ready() and self.BoxConstraintValues.ready():
-                    for i, slot in enumerate(zip(self.BoxConstraintRois,self.BoxConstraintValues)):
-                        for constr, val in zip(slot[0].value, slot[1].value):
-                            boxConstraintList.append((i, constr, val))
-                    if len(boxConstraintList) > 0:
-                        boxConstraints = self.constructBoxConstraints(boxConstraintList)
-
-                params = self._svr.get_params() 
-                try:
-                    pool = RequestPool()
-                    def train_and_store(i):
-                        result[i] = SVR(**params)
-                        result[i].fitPrepared(fullFeatMatrix, fullLabelsMatrix, tags = fullTags, boxConstraints = boxConstraints, numRegressors
-                             = self.numRegressors, trainAll = False)
-                    for i in range(self.numRegressors):
-                        req = pool.request(partial(train_and_store, i))
-                    
-                    pool.wait()
-                    pool.clean()
+        for i,labels in enumerate(self.inputs["ForegroundLabels"]):
+            if labels.meta.shape is not None:
+                opGaussian = OpGaussianSmoothing(parent = self, graph = self.graph)
+                opGaussian.Sigma.setValue(self.Sigma.value)
+                opGaussian.Input.connect(self.ForegroundLabels[i])
+                blocks = self.inputs["nonzeroLabelBlocks"][i][0].wait()
                 
-                except:
-                    logger.error("ERROR: could not learn regressor")
-                    logger.error("fullFeatMatrix shape = {}, dtype = {}".format(fullFeatMatrix.shape, fullFeatMatrix.dtype) )
-                    logger.error("fullLabelsMatrix shape = {}, dtype = {}".format(fullLabelsMatrix.shape, fullLabelsMatrix.dtype) )
-                finally:
-                    self.progressSignal(100) 
+                reqlistlabels = []
+                reqlistbg = []
+                reqlistfeat = []
+                progress += 10 / numImages
+                self.progressSignal(progress)
+                
+                for b in blocks[0]:
+                    request = opGaussian.Output[b]
+                    #request = labels[b]
+                    featurekey = list(b)
+                    featurekey[-1] = slice(None, None, None)
+                    request2 = self.Images[i][featurekey]
+                    request3 = self.inputs["BackgroundLabels"][i][b]
+                    reqlistlabels.append(request)
+                    reqlistfeat.append(request2)
+                    reqlistbg.append(request3)
 
-            return result
+                traceLogger.debug("Requests prepared")
+
+                numLabelBlocks = len(reqlistlabels)
+                progress_outer = [progress]
+                if numLabelBlocks > 0:
+                    progressInc = (80 - 10)/(numLabelBlocks * numImages)
+
+                def progressNotify(req):
+                    progress_outer[0] += progressInc/2
+                    self.progressSignal(progress_outer[0])
+
+                for ir, req in enumerate(reqlistfeat):
+                    image = req.notify_finished(progressNotify)
+
+                for ir, req in enumerate(reqlistlabels):
+                    labblock = req.notify_finished(progressNotify)
+
+                for ir, req in enumerate(reqlistbg):
+                    labbgblock = req.notify_finished(progressNotify)
+                
+                traceLogger.debug("Requests fired")
+                
+
+                #Fixme: Maybe later request only part of the region?
+
+                #image=self.inputs["Images"][i][:].wait()
+                for ir, req in enumerate(reqlistlabels):
+                    
+                    labblock = req.wait()
+                    
+                    image = reqlistfeat[ir].wait()
+                    labbgblock = reqlistbg[ir].wait()
+                    labblock = labblock.reshape((image.shape[:-1]))
+                    image = image.reshape((-1, image.shape[-1]))
+                    labbgindices = np.where(labbgblock == 2)            
+                    labbgindices = np.ravel_multi_index(labbgindices, labbgblock.shape)
+                    
+                    newDot, mapping, tags = \
+                    self._svr.prepareDataRefactored(labblock, labbgindices)
+                    #self._svr.prepareData(labblock, smooth = True)
+
+                    labels   = newDot[mapping]
+                    features = image[mapping]
+
+                    featMatrix.append(features)
+                    labelsMatrix.append(labels)
+                    tagList.append(tags)
+                
+                progress = progress_outer[0]
+
+                traceLogger.debug("Requests processed")
+
+
+        self.progressSignal(80 / numImages)
+        if len(featMatrix) == 0 or len(labelsMatrix) == 0:
+            result[:] = None
+
+        else:
+            posTags = [tag[0] for tag in tagList]
+            negTags = [tag[1] for tag in tagList]
+            numPosTags = np.sum(posTags)
+            numTags = np.sum(posTags) + np.sum(negTags)
+            fullFeatMatrix = np.ndarray((numTags, self.Images[0].meta.shape[-1]), dtype = np.float64)
+            fullLabelsMatrix = np.ndarray((numTags), dtype = np.float64)
+            fullFeatMatrix[:] = np.NAN
+            fullLabelsMatrix[:] = np.NAN
+            currPosCount = 0
+            currNegCount = numPosTags
+            for i, posCount in enumerate(posTags):
+                fullFeatMatrix[currPosCount:currPosCount + posTags[i],:] = featMatrix[i][:posCount,:]
+                fullLabelsMatrix[currPosCount:currPosCount + posTags[i]] = labelsMatrix[i][:posCount]
+                fullFeatMatrix[currNegCount:currNegCount + negTags[i],:] = featMatrix[i][posCount:,:]
+                fullLabelsMatrix[currNegCount:currNegCount + negTags[i]] = labelsMatrix[i][posCount:]
+                currPosCount += posTags[i]
+                currNegCount += negTags[i]
+
+
+            assert(not np.isnan(np.sum(fullFeatMatrix)))
+
+            fullTags = [np.sum(posTags), np.sum(negTags)]
+            #pool = RequestPool()
+
+
+
+            boxConstraintList = []
+            boxConstraints = None
+            if self.BoxConstraintRois.ready() and self.BoxConstraintValues.ready():
+                for i, slot in enumerate(zip(self.BoxConstraintRois,self.BoxConstraintValues)):
+                    for constr, val in zip(slot[0].value, slot[1].value):
+                        boxConstraintList.append((i, constr, val))
+                if len(boxConstraintList) > 0:
+                    boxConstraints = self.constructBoxConstraints(boxConstraintList)
+
+            params = self._svr.get_params() 
+            try:
+                pool = RequestPool()
+                def train_and_store(i):
+                    result[i] = SVR(**params)
+                    result[i].fitPrepared(fullFeatMatrix, fullLabelsMatrix, tags = fullTags, boxConstraints = boxConstraints, numRegressors
+                         = self.numRegressors, trainAll = False)
+                for i in range(self.numRegressors):
+                    req = pool.request(partial(train_and_store, i))
+                
+                pool.wait()
+                pool.clean()
+            
+            except:
+                logger.error("ERROR: could not learn regressor")
+                logger.error("fullFeatMatrix shape = {}, dtype = {}".format(fullFeatMatrix.shape, fullFeatMatrix.dtype) )
+                logger.error("fullLabelsMatrix shape = {}, dtype = {}".format(fullLabelsMatrix.shape, fullLabelsMatrix.dtype) )
+            finally:
+                self.progressSignal(100) 
+
+        return result
 
     def propagateDirty(self, slot, subindex, roi):
         if slot is not self.inputs["fixClassifier"] and self.inputs["fixClassifier"].value == False:
             self.outputs["Classifier"].setDirty((slice(None),))
     
     def constructBoxConstraints(self, constraints):
-        
-
         
         try:
             shape = np.array([[stop - start for start, stop in zip(constr[0][1:-2], constr[1][1:-2])] for _, constr,_ in
@@ -291,6 +305,8 @@ class OpTrainCounter(Operator):
         
         return boxConstraints
 
+if not any(OpTrainCounter.availableOptions):
+    raise ImportError("None of the implemented methods are available")
 
 
 
@@ -363,7 +379,7 @@ class OpPredictCounter(Operator):
 
         t3 = time.time()
 
-        logger.info("Predict took %fseconds, actual RF time was %fs, feature time was %fs" % (t3-t1, t3-t2, t2-t1))
+        logger.debug("Predict took %fseconds, actual RF time was %fs, feature time was %fs" % (t3-t1, t3-t2, t2-t1))
         return result
 
 

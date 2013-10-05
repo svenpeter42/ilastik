@@ -6,7 +6,7 @@ from tests.helpers import ShellGuiTestCaseBase
 from ilastik.workflows.pixelClassification import PixelClassificationWorkflow
 from lazyflow.operators import OpPixelFeaturesPresmoothed
 
-from ilastik.utility.timer import Timer
+from lazyflow.utility.timer import Timer
 
 import logging
 logger = logging.getLogger(__name__)
@@ -159,9 +159,6 @@ class TestPixelClassificationGuiBenchmarking(ShellGuiTestCaseBase):
                 
                 imgView = gui.currentGui().editor.imageViews[i]
                 self.strokeMouseFromCenter( imgView, self.LABEL_START, self.LABEL_STOP )
-
-                # Make sure the labels were added to the label array operator
-                assert opPix.MaxLabelValue.value == i+1, "Max label value was {}".format( opPix.MaxLabelValue.value )
 
             self.waitForViews(gui.currentGui().editor.imageViews)
 

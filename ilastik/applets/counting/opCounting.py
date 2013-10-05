@@ -1,6 +1,8 @@
 #Python
 import copy
 from functools import partial
+import itertools
+import math
 
 #SciPy
 import numpy
@@ -12,6 +14,8 @@ from lazyflow.operators import OpBlockedSparseLabelArray, OpValueCache, \
                                OpArrayCache, OpMultiArraySlicer2, \
                                OpPrecomputedInput, OpPixelOperator, OpMaxChannelIndicatorOperator, \
                                Op5ifyer
+from lazyflow.request import Request, RequestPool
+from lazyflow.roi     import roiToSlice, sliceToRoi
                                
 from ilastik.applets.counting.countingOperators import OpTrainCounter, OpPredictCounter, OpLabelPreviewer
 
@@ -27,9 +31,10 @@ class OpVolumeOperator(Operator):
     description = "Do Operations involving the whole volume"
     inputSlots = [InputSlot("Input"), InputSlot("Function")]
     outputSlots = [OutputSlot("Output")]
+    DefaultBlockSize = 128
+    blockShape = InputSlot(value = DefaultBlockSize)
 
     def setupOutputs(self):
-        print "setupOutputsVolume"
         testInput = numpy.ones((3,3))
         testFun = self.Function.value
         testOutput = testFun(testInput)
@@ -42,25 +47,70 @@ class OpVolumeOperator(Operator):
 
 
     def execute(self, slot, subindex, roi, result):
-        print "ExecuteVolume"
         with self._lock:
             if self.cache is None:
+                fullBlockShape = numpy.array([self.blockShape.value for i in self.Input.meta.shape])
                 fun = self.inputs["Function"].value
-                data = self.inputs["Input"][:].wait()
-                self.cache = [fun(data)]
+                #data = self.inputs["Input"][:].wait()
+                #split up requests into blocks
+                shape = self.Input.meta.shape
+                numBlocks = numpy.ceil(shape/(1.0*fullBlockShape)).astype("int")
+                blockCache = numpy.ndarray(shape = numpy.prod(numBlocks), dtype=self.Output.meta.dtype)
+                pool = RequestPool()
+                #blocks holds the different roi keys for each of the blocks
+                blocks = itertools.product(*[range(i) for i in numBlocks])
+                blockKeys = []
+                for b in blocks:
+                    start = b * fullBlockShape
+                    stop = b * fullBlockShape + fullBlockShape
+                    stop = numpy.min(numpy.vstack((stop, shape)), axis=0)
+                    blockKey = roiToSlice(start, stop)
+                    blockKeys.append(blockKey)
+                
+                def predict_block(i):
+                    data = self.Input[blockKeys[i]].wait()
+                    blockCache[i] = fun(data)
+                    
+                for i,f in enumerate(blockCache):
+                    req = pool.request(partial(predict_block,i))
+
+                pool.wait()
+                pool.clean()
+
+                self.cache = [fun(blockCache)]
             return self.cache
 
     def propagateDirty(self, slot, subindex, roi):
-        print "propagateVolume"
         key = roi.toSlice()
         if slot == self.Input or slot == self.Function:
             self.outputs["Output"].setDirty( slice(None) )
         self.cache = None
 
+class OpUpperBound(Operator):
+    name = "OpUpperBound"
+    description = "Calculate the upper bound of the data for correct normalization of the output"
+    inputSlots = [InputSlot("Sigma", stype = "float")]
+    outputSlots = [OutputSlot("UpperBound")]
+
+    def setupOutputs(self):
+        self.UpperBound.meta.dtype = numpy.float32
+        self.UpperBound.meta.shape = (1,)
+
+    def execute(self, slot, subindex, roi, result):
+            
+        sigma = self.Sigma.value
+        result[...] = 3 / (2 * math.pi * sigma**2)
+        return result
+    
+    def propagateDirty(self, slot, subindex, roi):
+        key = roi.toSlice()
+        self.UpperBound.setDirty( key[:-1] )
+
+
 class OpMean(Operator):
 
-    name = "OpVolumeOperator"
-    description = "Do Operations involving the whole volume"
+    name = "OpMean"
+    description = "Calculate the mean of the Input"
     Input = InputSlot("Input")
     Output = OutputSlot("Output")
 
@@ -81,7 +131,6 @@ class OpMean(Operator):
         result[..., 0] = numpy.mean(data, axis = 2)
 
     def propagateDirty(self, slot, subindex, roi):
-        print "propagateVolume"
         key = roi.toSlice()
         self.Output.setDirty( key[:-1] )
 
@@ -120,12 +169,13 @@ class OpCounting( Operator ):
 
     CachedPredictionProbabilities = OutputSlot(level=1) # Classification predictions (via feature cache AND prediction cache)
 
-    #HeadlessPredictionProbabilities = OutputSlot(level=1) # Classification predictions ( via no image caches (except for the classifier itself )
+    HeadlessPredictionProbabilities = OutputSlot(level=1) # Classification predictions ( via no image caches (except for the classifier itself )
     #HeadlessUint8PredictionProbabilities = OutputSlot(level=1) # Same as above, but 0-255 uint8 instead of 0.0-1.0 float32
 
     UncertaintyEstimate = OutputSlot(level=1)
 
     # GUI-only (not part of the pipeline, but saved to the project)
+    UpperBound = OutputSlot()
     LabelNames = OutputSlot()
     LabelColors = OutputSlot()
     PmapColors = OutputSlot()
@@ -164,13 +214,29 @@ class OpCounting( Operator ):
         self.opMaxLabel.Inputs.connect( self.opLabelPipeline.MaxLabel )
         self.MaxLabelValue.connect( self.opMaxLabel.Output )
 
+        self.GetFore= OpMultiLaneWrapper(OpPixelOperator,parent = self)
+        def conv(arr):
+            numpy.place(arr, arr ==2, 0)
+            return arr.astype(numpy.float)
+        self.GetFore.Function.setValue(conv)
+        self.GetFore.Input.connect(self.opLabelPipeline.Output)
+
+        self.LabelPreviewer = OpMultiLaneWrapper(OpLabelPreviewer, parent = self)
+        self.LabelPreviewer.Input.connect(self.GetFore.Output)
+
+        self.LabelPreview.connect(self.LabelPreviewer.Output)
+
+
         # Hook up the Training operator
+        self.opUpperBound = OpUpperBound( parent= self, graph= self.graph )
+        self.UpperBound.connect(self.opUpperBound.UpperBound)
         self.opTrain = OpTrainCounter( parent=self, graph=self.graph )
-        self.opTrain.inputs['Labels'].connect( self.opLabelPipeline.Output )
+        self.opTrain.inputs['ForegroundLabels'].connect( self.GetFore.Output)
+        self.opTrain.inputs['BackgroundLabels'].connect( self.opLabelPipeline.Output)
         self.opTrain.inputs['Images'].connect( self.CachedFeatureImages )
-        #self.opTrain.inputs['MaxLabel'].connect( self.opMaxLabel.Output )
         self.opTrain.inputs["nonzeroLabelBlocks"].connect( self.opLabelPipeline.nonzeroBlocks )
         self.opTrain.inputs['fixClassifier'].setValue( True )
+        self.opTrain.inputs["UpperBound"].connect(self.UpperBound)
 
         # Hook up the Classifier Cache
         # The classifier is cached here to allow serializers to force in
@@ -178,9 +244,6 @@ class OpCounting( Operator ):
         self.classifier_cache = OpValueCache( parent=self, graph=self.graph )
         self.classifier_cache.inputs["Input"].connect(self.opTrain.outputs['Classifier'])
         self.Classifier.connect( self.classifier_cache.Output )
-        self.LabelPreviewer = OpMultiLaneWrapper(OpLabelPreviewer, parent = self)
-        self.LabelPreviewer.Labels.connect(self.opLabelPipeline.Output)
-        self.LabelPreview.connect(self.LabelPreviewer.Output)
 
         # Hook up the prediction pipeline inputs
         self.opPredictionPipeline = OpMultiLaneWrapper( OpPredictionPipeline, parent=self )
@@ -194,7 +257,7 @@ class OpCounting( Operator ):
         # Prediction pipeline outputs -> Top-level outputs
         self.PredictionProbabilities.connect( self.opPredictionPipeline.PredictionProbabilities )
         self.CachedPredictionProbabilities.connect( self.opPredictionPipeline.CachedPredictionProbabilities )
-        #self.HeadlessPredictionProbabilities.connect( self.opPredictionPipeline.HeadlessPredictionProbabilities )
+        self.HeadlessPredictionProbabilities.connect( self.opPredictionPipeline.HeadlessPredictionProbabilities )
         #self.HeadlessUint8PredictionProbabilities.connect( self.opPredictionPipeline.HeadlessUint8PredictionProbabilities )
         #self.PredictionProbabilityChannels.connect( self.opPredictionPipeline.PredictionProbabilityChannels )
         #self.SegmentationChannels.connect( self.opPredictionPipeline.SegmentationChannels )
@@ -320,8 +383,16 @@ class OpCounting( Operator ):
             raise DatasetConstraintError(
                 "Objects Counting Workflow",
                 "All input images must be 2D (they cannot contain the z dimension).  "\
-                "Your new image has {} has z dimension"\
+                "Your new image has {} z dimension"\
                 .format( thisLaneTaggedShape['z']))
+                # Find a different lane and use it for comparison
+        
+        if thisLaneTaggedShape.has_key('t'):
+            raise DatasetConstraintError(
+                "Objects Counting Workflow",
+                "All input images must be 2D (they cannot contain the t dimension).  "\
+                "Your new image has {} t dimension"\
+                .format( thisLaneTaggedShape['t']))
                 # Find a different lane and use it for comparison
         
         validShape = thisLaneTaggedShape
@@ -414,7 +485,7 @@ class OpPredictionPipelineNoCache(Operator):
     PredictionsFromDisk = InputSlot( optional=True )
     
     HeadlessPredictionProbabilities = OutputSlot() # drange is 0.0 to 1.0
-    HeadlessUint8PredictionProbabilities = OutputSlot() # drange 0 to 255
+    #HeadlessUint8PredictionProbabilities = OutputSlot() # drange 0 to 255
 
     def __init__(self, *args, **kwargs):
         super( OpPredictionPipelineNoCache, self ).__init__( *args, **kwargs )
@@ -427,14 +498,17 @@ class OpPredictionPipelineNoCache(Operator):
         self.cacheless_predict.inputs['Classifier'].connect(self.Classifier) 
         self.cacheless_predict.inputs['Image'].connect(self.FeatureImages) # <--- Not from cache
         self.cacheless_predict.inputs['LabelsCount'].connect(self.MaxLabel)
-        self.HeadlessPredictionProbabilities.connect(self.cacheless_predict.PMaps)
+        self.meaner = OpMean(parent = self)
+        self.meaner.Input.connect(self.cacheless_predict.PMaps)
+        self.HeadlessPredictionProbabilities.connect(self.meaner.Output)
+
 
         # Alternate headless output: uint8 instead of float.
         # Note that drange is automatically updated.        
-        self.opConvertToUint8 = OpPixelOperator( parent=self )
-        self.opConvertToUint8.Input.connect( self.cacheless_predict.PMaps )
-        self.opConvertToUint8.Function.setValue( lambda a: (255*a).astype(numpy.uint8) )
-        self.HeadlessUint8PredictionProbabilities.connect( self.opConvertToUint8.Output )
+        #self.opConvertToUint8 = OpPixelOperator( parent=self )
+        #self.opConvertToUint8.Input.connect( self.cacheless_predict.PMaps )
+        #self.opConvertToUint8.Function.setValue( lambda a: (255*a).astype(numpy.uint8) )
+        #self.HeadlessUint8PredictionProbabilities.connect( self.opConvertToUint8.Output )
 
     def setupOutputs(self):
         pass

@@ -5,15 +5,16 @@ from ilastik.applets.objectExtraction import ObjectExtractionApplet
 from ilastik.applets.tracking.chaingraph.chaingraphTrackingApplet import ChaingraphTrackingApplet
 from ilastik.applets.thresholdTwoLevels.thresholdTwoLevelsApplet import ThresholdTwoLevelsApplet
 from lazyflow.operators.opReorderAxes import OpReorderAxes
+from ilastik.applets.tracking.base.trackingBaseDataExportApplet import TrackingBaseDataExportApplet
 
 
 class ChaingraphTrackingWorkflow( Workflow ):
     workflowName = "Automatic Tracking Workflow (Chaingraph)"
 
-    def __init__( self, headless, workflow_cmdline_args, *args, **kwargs ):
+    def __init__( self, shell, headless, workflow_cmdline_args, *args, **kwargs ):
         graph = kwargs['graph'] if 'graph' in kwargs else Graph()
         if 'graph' in kwargs: del kwargs['graph']
-        super(ChaingraphTrackingWorkflow, self).__init__(headless=headless, graph=graph, *args, **kwargs)
+        super(ChaingraphTrackingWorkflow, self).__init__(shell, headless, graph=graph, *args, **kwargs)
         data_instructions = 'Use the "Raw Data" tab to load your intensity image(s).\n\n'\
                             'Use the "Prediction Maps" tab to load your pixel-wise probability image(s).'
         ## Create applets 
@@ -37,12 +38,16 @@ class ChaingraphTrackingWorkflow( Workflow ):
         
         self.trackingApplet = ChaingraphTrackingApplet( workflow=self )
         
+        self.dataExportApplet = TrackingBaseDataExportApplet(self, "Tracking Result Export")
+        
         self._applets = []                
         self._applets.append(self.dataSelectionApplet)
         self._applets.append(self.thresholdTwoLevelsApplet)
         self._applets.append(self.objectExtractionApplet)
         self._applets.append(self.trackingApplet)
-
+        self._applets.append(self.dataExportApplet)
+        
+    
     @property
     def applets(self):
         return self._applets
@@ -56,6 +61,7 @@ class ChaingraphTrackingWorkflow( Workflow ):
         opTwoLevelThreshold = self.thresholdTwoLevelsApplet.topLevelOperator.getLane(laneIndex)
         opObjExtraction = self.objectExtractionApplet.topLevelOperator.getLane(laneIndex)
         opTracking = self.trackingApplet.topLevelOperator.getLane(laneIndex)
+        opDataExport = self.dataExportApplet.topLevelOperator.getLane(laneIndex)
                 
         ## Connect operators ##
         op5Raw = OpReorderAxes(parent=self)
@@ -77,4 +83,10 @@ class ChaingraphTrackingWorkflow( Workflow ):
         opTracking.RawImage.connect( op5Raw.Output )
         opTracking.LabelImage.connect( opObjExtraction.LabelImage )
         opTracking.ObjectFeatures.connect( opObjExtraction.RegionFeatures )        
+        
+        opDataExport.WorkingDirectory.connect( self.dataSelectionApplet.topLevelOperator.WorkingDirectory )
+        opDataExport.RawData.connect( op5Raw.Output )
+        opDataExport.Input.connect( opTracking.Output )
+        opDataExport.RawDatasetInfo.connect( opData.DatasetGroup[0] )
+        
         

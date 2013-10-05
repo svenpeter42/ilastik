@@ -12,7 +12,7 @@ from lazyflow.operators.opDenseLabelArray import OpDenseLabelArray
 from lazyflow.operators.valueProviders import OpValueCache
 
 #ilastik
-from ilastik.utility.timer import Timer
+from lazyflow.utility.timer import Timer
 from ilastik.applets.base.applet import DatasetConstraintError
 
 #carving
@@ -233,10 +233,11 @@ class OpCarving(Operator):
     def updatePreprocessing(self):
         if self.PreprocessingApplet is None or self._mst is None:
             return
-        if len(self._mst.object_names)==0:
-            self.PreprocessingApplet.enableWriteprotect(True)
-        else:
-            self.PreprocessingApplet.enableWriteprotect(False)
+        #FIXME: why were the following lines needed ?
+        # if len(self._mst.object_names)==0:
+        #     self.PreprocessingApplet.enableWriteprotect(True)
+        # else:
+        #     self.PreprocessingApplet.enableWriteprotect(False)
     
     def hasCurrentObject(self):
         """

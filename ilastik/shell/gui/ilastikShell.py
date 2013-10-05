@@ -40,7 +40,7 @@ from ilastik.shell.projectManager import ProjectManager
 from ilastik.utility.gui.eventRecorder import EventRecorderGui
 from ilastik.config import cfg as ilastik_config
 from iconMgr import ilastikIcons
-from ilastik.utility.pathHelpers import compressPathForDisplay
+from lazyflow.utility.pathHelpers import compressPathForDisplay
 from ilastik.shell.gui.errorMessageFilter import ErrorMessageFilter
 from ilastik.shell.gui.memUsageDialog import MemUsageDialog
 from ilastik.shell.shellAbc import ShellABC
@@ -501,7 +501,7 @@ class IlastikShell( QMainWindow ):
         if self._memDlg is None:
             self._memDlg = MemUsageDialog()
             self._memDlg.setWindowTitle("Memory Usage")
-            self._memDlg.showMaximized()
+            self._memDlg.show()
         else:
             self._memDlg.show()
             self._memDlg.raise_()
@@ -517,12 +517,21 @@ class IlastikShell( QMainWindow ):
 
         return menu
 
-    def exportCurrentOperatorDiagram(self, detail):        
+    def exportCurrentOperatorDiagram(self, detail):
+        if len(self._applets) == 0:
+            QMessageBox.critical(self, "Export Error", "There are no operators to export.")
+            return
+        elif len(self._applets)<=self.currentAppletIndex:
+            QMessageBox.critical(self, "Export Error", "The current applet does not exist.")
+            return
         op = self._applets[self.currentAppletIndex].topLevelOperator
         assert isinstance(op, Operator), "Top-level operator of your applet must be a lazyflow.Operator if you want to export it!"
         self.exportOperatorDiagram(op, detail)
         
     def exportWorkflowDiagram(self, detail):
+        if self.projectManager is None:
+            QMessageBox.critical(self, "Export Error", "You have to start a project before you can export workflow diagrams.")
+            return
         assert isinstance(self.projectManager.workflow, Operator), "Workflow must be an operator if you want to export it!"
         self.exportOperatorDiagram(self.projectManager.workflow, detail)
     
@@ -564,8 +573,8 @@ class IlastikShell( QMainWindow ):
         if self.projectManager is None:
             windowTitle += "No Project Loaded"
         else:
-            windowTitle += self.projectManager.currentProjectPath
-            windowTitle += " - " + self.projectManager.workflow.workflowName
+            windowTitle += self.projectManager.currentProjectPath + " - "
+            windowTitle += self.projectManager.workflow.workflowName
             
             readOnly = self.projectManager.currentProjectIsReadOnly
             if readOnly:
@@ -1225,8 +1234,6 @@ class IlastikShell( QMainWindow ):
             force - Don't check the project for unsaved data.
             quitApp - For testing purposes, set this to False if you just want to close the main window without quitting the app.
         """
-        logger.info("Quit Action Triggered")
-        
         if force or self.confirmQuit():
             self.closeAndQuit(quitApp)
         
