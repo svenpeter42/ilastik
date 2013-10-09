@@ -22,7 +22,8 @@ def calculate_features(index, locations, list_features):
         p_index = allpoints[i,:]
         s_index = index[i]
         for j, feature in enumerate(list_features):
-            triangulation_features[s_index,j] += feature(p_index[0],p_index[1])
+            if s_index != -1:
+                triangulation_features[s_index,j] += feature(p_index[0],p_index[1])
         #triangulation_dots[s_index]       += triangulation_dot[p_index[0], p_index[1]]
 
     return triangulation_features
@@ -45,7 +46,7 @@ def predict_triangles(shape, ratio, list_features, counter):
     print "end test triangulation"
     res = counter.predict(test_features)
     print "finished prediction"
-    pixelres = np.zeros(test_index.shape)
+    pixelres = np.zeros(shape).reshape(-1)
     for i,pixel in enumerate(pixelres):
         triangdens = res[test_index[i]]
         triangcount = test_features[test_index[i],0]
@@ -76,6 +77,7 @@ def create_boxes(size, shape, offset = 0):
     test_locations = test_locations.reshape((2,-1))
     #print test_locations.shape
     #print test_index.reshape(-1)
+    test_index[:,0:offset] = -1
 
     return test_index.reshape(-1), test_locations
 
@@ -86,17 +88,19 @@ def predict_squares(shape, ratio, list_features, counter):
     #just create test_index, test_locations and list_features correctly
     #example:
     #test_index = [0,0,0,0], test_locations = [[0,1,0,1],[0,0,1,1]]
-    test_index, test_locations = create_boxes(3, shape)
-    test_features = calculate_features(test_index, test_locations, list_features)
-    res = counter.predict(test_features)
-    pixelres = np.zeros(test_index.shape)
-    for i,pixel in enumerate(pixelres):
-        triangdens = res[test_index[i]]
-        triangcount = test_features[test_index[i],0]
-        if test_index[i] != -1:
-            pixelres[i] += triangdens / triangcount
+    pixelres = np.zeros(shape).reshape(-1)
+    offsets = [0,1,2]
+    for offset in offsets:
+        test_index, test_locations = create_boxes(5, shape, offset = offset)
+        test_features = calculate_features(test_index, test_locations, list_features)
+        res = counter.predict(test_features)
+        for i,pixel in enumerate(pixelres):
+            if test_index[i] != -1:
+                triangdens = res[test_index[i]]
+                triangcount = test_features[test_index[i],0]
+                pixelres[i] += triangdens / triangcount
 
-    return pixelres
+    return pixelres / len(offsets)
 
 
 if __name__ == "__main__":
