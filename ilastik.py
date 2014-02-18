@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 # This program is free software; you can redistribute it and/or
 # modify it under the terms of the GNU General Public License
 # as published by the Free Software Foundation; either version 2
@@ -13,8 +15,6 @@
 # Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
 #
 # Copyright 2011-2014, the ilastik developers
-
-#!/usr/bin/env python
 
 # Standard
 import sys
