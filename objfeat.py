@@ -2,6 +2,7 @@
 from collections import defaultdict
 import cgi
 import sys
+import copy
 
 #SciPy
 
@@ -22,6 +23,7 @@ class ObjectFeatureInfo(object):
         self.group  = group
         self._size = size
         self.meaning = None
+        self.neighborhoodPossible = False
         
     def size(self, dim, ch):
         """return the size of the feature vector
@@ -78,23 +80,28 @@ def getVigraObjectFeatureInfos():
     r["Global<Minimum >"] = o 
     
     o= ObjectFeatureInfo("Intensity Histogram",64,   "intensity")
+    o.neighborhoodPossible = True
     o.meaning = "TODO"
     r["Histogram"] = o
     
-    o= ObjectFeatureInfo("Kurtosis (4th moment) of intensities", 1, "intensity")
+    o= ObjectFeatureInfo("Kurtosis (4th moment) of intensities", "ch", "intensity")
     o.meaning = "intensity kurtosis (computed per channel)"
+    o.neighborhoodPossible = True
     r["Kurtosis"] = o 
     
     o= ObjectFeatureInfo("Maximal intensity","ch", "intensity")
     o.meaning = "maximum intensity (computed per channel)"
+    o.neighborhoodPossible = True
     r["Maximum"] = o 
     
     o= ObjectFeatureInfo("Minimal intensity" ,"ch", "intensity")
     o.meaning = "minimum intensity (computed per channel)"
+    o.neighborhoodPossible = True
     r["Minimum"] = o 
 
     o= ObjectFeatureInfo("Mean intensity" ,"ch", "intensity")  
     o.meaning = "mean intensity (computed per channel)"
+    o.neighborhoodPossible = True
     r["Mean"] = o
         
     o= ObjectFeatureInfo("Quantiles (0%, 10%, 25%, 50%, 75%, 90%, 100%) of intensities", 7, "intensity")
@@ -115,18 +122,22 @@ def getVigraObjectFeatureInfos():
 
     o= ObjectFeatureInfo("Skewness (3rd moment) of intensities", "ch", "intensity")
     o.meaning = "intensity skewness (computed per channel)"
+    o.neighborhoodPossible = True
     r["Skewness"] = o 
 
     o= ObjectFeatureInfo("Sum of pixel intensities", "ch", "intensity")
     o.meaning = "sum of the intensities (computed per channel)"
+    o.neighborhoodPossible = True
     r["Sum"] = o
 
     o= ObjectFeatureInfo("Variance (2nd moment) of intensities", "ch", "intensity")
     o.meaning = "intensity variance (computed per channel)"
+    o.neighborhoodPossible = True
     r["Variance"] = o                                                   
 
     o= ObjectFeatureInfo("Covariance", "ch2", "intensity")
     o.meaning = "covariance matrix for multi-channel data"
+    o.neighborhoodPossible = True
     r["Covariance"] = o                                                
 
     o= ObjectFeatureInfo("Eigenvectors from PCA (each pixel has mass according to intensity)", "coor2", "shape")
@@ -257,7 +268,9 @@ def testObjectFeatureDefinitions(r):
             else:
                 data = numpy.random.random(shape+(channel,)).astype(numpy.float32)
             seg  = numpy.zeros(shape, dtype=numpy.uint32)
-            seg.flat = numpy.arange(1,numpy.prod(seg.shape)+1)
+            #seg.flat = numpy.arange(1,numpy.prod(seg.shape)+1)
+            seg[0:10,0:10] = 1
+            seg[0:10,10:20] = 2
             
             features = vigra.analysis.extractRegionFeatures(data, seg, features="all")
             
@@ -269,7 +282,11 @@ def testObjectFeatureDefinitions(r):
                 info = r[k]
                 #assert info.meaning is not None
                 
-                feat = features[k]
+                try:
+                    feat = features[k]
+                except Exception as e:
+                    print "ERROR at %s | shape = %r, channel = %r" % (k, shape, channel)
+                    raise e
                 
                 realSize = numpy.prod(feat.shape[1:]) if isinstance(feat, numpy.ndarray) and len(feat.shape) > 1 else 1
                 assert info.size(len(shape), channel) == realSize, "%s has real size %d, but needs %d (shape=%r, channels=%d)" % (k, realSize, info.size(len(shape), channel), shape, channel)
@@ -288,6 +305,9 @@ class ObjectFeatureSelectionWidget(QWidget):
     
     msg_NoFeatureSelected = "No feature selected"
     msg_FeaturesSelected  = "%d features selected, %d channels in total"
+    msg_NeighborhoodSize  = "neighborhood size in pixels:"
+    
+    default_neighborhood  = (30,30,1)
     
     def __init__(self, dim, channels, infos, parent=None):
         super(ObjectFeatureSelectionWidget, self).__init__(parent)
@@ -308,8 +328,20 @@ class ObjectFeatureSelectionWidget(QWidget):
         self.label = QLabel(self)
         self.label.setText(self.msg_NoFeatureSelected)
         
+        nbLayout = QHBoxLayout()
+        nbLayout.addSpacerItem(QSpacerItem(0,0,QSizePolicy.Expanding,QSizePolicy.Fixed))
+        nbLayout.addWidget(QLabel(self.msg_NeighborhoodSize))
+        self.nbSpin = [None, None, None]
+        self.axes = ["X", "Y", "Z"]
+        for i in range(3):
+            self.nbSpin[i] = QSpinBox()
+            self.nbSpin[i].setValue(self.default_neighborhood[i])
+            nbLayout.addWidget(QLabel(self.axes[i]))
+            nbLayout.addWidget(self.nbSpin[i])
+        
         v = QVBoxLayout()
         v.addWidget(self.treeWidget)
+        v.addLayout(nbLayout)
         v.addWidget(self.label)
         
         h = QSplitter(self)
@@ -335,12 +367,23 @@ class ObjectFeatureSelectionWidget(QWidget):
             groupRoot.setText(0, k)
             pluginRoot.addChild(groupRoot)
             groupRoot.setExpanded(True)
-            for v in vv:
+            
+            def addItem(key, info):
                 child = QTreeWidgetItem()
-                child.setText(0, self.infos[v].humanName)
-                self.item2id[child] = v
+                child.setText(0, info.humanName)
+                self.item2id[child] = key 
                 groupRoot.addChild(child)
                 child.setCheckState(0, Qt.Unchecked)
+            
+            for v in vv:
+                info = self.infos[v] 
+                addItem(v, info)
+                
+                if info.neighborhoodPossible:
+                    infoNb = copy.copy(info)
+                    infoNb.humanName += " in neighborhood"
+                    self.infos["nb_"+v] = infoNb
+                    addItem("nb_"+v, infoNb)
         
         pluginRoot.setExpanded(True)
         self.treeWidget.itemChanged.connect(self._handleItemChanged)
@@ -353,7 +396,9 @@ class ObjectFeatureSelectionWidget(QWidget):
                 continue
             sel.append(vigraName)
         return sorted(sel)
-
+    
+    def neighborhoodSize(self):
+        return tuple(x.value() for x in self.nbSpin)
 
     #private:
 
@@ -405,4 +450,5 @@ if __name__ == "__main__":
     
     t = ObjectFeatureSelectionWidget(2, 0, infos)
     t.show()
+    print t.neighborhoodSize()
     app.exec_()
