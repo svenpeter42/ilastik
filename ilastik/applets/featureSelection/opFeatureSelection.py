@@ -73,6 +73,8 @@ class OpFeatureSelectionNoCache(Operator):
     def __init__(self, filter_implementation, *args, **kwargs):
         super(OpFeatureSelectionNoCache, self).__init__(*args, **kwargs)
 
+        #filter_implementation='Interpolated'
+
         # Create the operator that actually generates the features
         if filter_implementation == 'Original':
             self.opPixelFeatures = OpPixelFeaturesPresmoothed_Original(parent=self)

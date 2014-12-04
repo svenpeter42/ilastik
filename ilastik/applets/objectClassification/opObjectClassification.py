@@ -592,6 +592,14 @@ class OpObjectClassification(Operator, MultiLaneOperatorABC):
                 json_data_this_time["bounding_boxes"] = bounding_boxes
                 json_data_this_time["labels"] = map(int, labels)
                 
+                counts = collections.OrderedDict()
+                counts["Count"] = map( partial(map, int), object_features["Default features"]["Count"])
+                json_data_this_time["counts"] = counts
+                
+                counts = collections.OrderedDict()
+                counts["Count"] = map( partial(map, int), object_features["Default features"]["Count"])
+                json_data_this_time["counts"] = counts
+                
                 json_data_this_lane[int(t)] = json_data_this_time
             json_data_all_lanes[lane_index] = json_data_this_lane
 
@@ -819,6 +827,9 @@ class OpObjectTrain(Operator):
         self.BadObjects.meta.axistags = None
 
     def execute(self, slot, subindex, roi, result):
+        
+        print "Train: Starting train execute"
+        
         featList = []
         all_col_names = []
         labelsList = []
@@ -859,8 +870,10 @@ class OpObjectTrain(Operator):
                 continue
             # compute the features if there are nonzero labels in this image
             # and only for the time steps, which have labels
+            #print "Train: Computing the features for labeled images"
             feats = self.Features[i](nztimes).wait()
 
+            #print "Train: Feature computation done"
             featstmp, row_names, col_names, labelstmp = make_feature_array(feats, selected, labels_image_filtered)
             if labelstmp.size == 0 or featstmp.size == 0:
                 continue
@@ -894,15 +907,21 @@ class OpObjectTrain(Operator):
         labelsMatrix = _concatenate(labelsList, axis=0)
 
         logger.info("training on matrix of shape {}".format(featMatrix.shape))
+        logger.info("label counts: {}".format(numpy.bincount(labelsMatrix.astype(numpy.uint32).flat)))
+
+        print("training on matrix of shape {}".format(featMatrix.shape))
+        print("label counts: {}".format(numpy.bincount(labelsMatrix.astype(numpy.uint32).flat)))
 
         if featMatrix.size == 0 or labelsMatrix.size == 0:
             result[:] = None
             return
         allLabels=map(long, range(1,numLabels+1))
         classifier_factory = ParallelVigraRfLazyflowClassifierFactory( self._tree_count, self.ForestCount.value, labels=allLabels )
+        print("Train: classifier training starting")
         classifier = classifier_factory.create_and_train( featMatrix.astype(numpy.float32), numpy.asarray(labelsMatrix, dtype=numpy.uint32) )
         avg_oob = numpy.mean(classifier.oobs)
         logger.info("training finished, average out-of-bag error: {}".format(avg_oob))
+        print("Training done, average oob {}".format(avg_oob))
         result[0] = classifier
         return result
 
@@ -1012,10 +1031,14 @@ class OpObjectPredict(Operator):
 
         # FIXME: self.prob_cache is shared, so we need to block.
         # However, this makes prediction single-threaded.
+        
+        #print "Predict: starting execute"
+        
         with self.lock:
             for t in times:
                 if t in self.prob_cache:
                     continue
+                #print "Predict: waiting for features"
 
                 # Initialize with a single value for the 'background object '
                 prob_predictions[t] = numpy.zeros( (1, len(self.ProbabilityChannels)), dtype=numpy.float32 )
@@ -1033,6 +1056,7 @@ class OpObjectPredict(Operator):
                 self.bad_objects[t] = numpy.zeros((ftmatrix.shape[0],))
                 self.bad_objects[t][rows] = 1
                 feats[t] = ftmatrix
+
 
             # Are there any objects to predict?
             if len(feats) > 0:
@@ -1053,6 +1077,8 @@ class OpObjectPredict(Operator):
                     logger.debug("Predicting object probabilities for time step: {}".format( t ))
                     req = Request( partial(predict_forest, t) )
                     pool.add(req)
+
+            #print "Predict: waiting for the pool"
     
                 pool.wait()
                 pool.clean()

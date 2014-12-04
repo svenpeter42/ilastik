@@ -172,8 +172,13 @@ class OpRegionFeatures3d(Operator):
         import time
         start = time.time()
         # Process ENTIRE volume
+        
+        print "Features: pulling raw data and cc"
+        
         rawVolume = self.RawVolume[:].wait()
         labelVolume = self.LabelVolume[:].wait()
+
+        print "Features: cc done"
 
         # Convert to 4D (preserve axis order)
         axes4d = self.RawVolume.meta.getTaggedShape().keys()
@@ -314,10 +319,13 @@ class OpRegionFeatures3d(Operator):
             #starting from 0, we stripped 0th background object in global computation
             for i in range(0, nobj):
                 logger.debug("processing object {}".format(i))
+                print("processing object {}".format(i))
                 extent = self.compute_extent(i, image, mincoords, maxcoords, axes, margin)
                 rawbbox = self.compute_rawbbox(image, extent, axes)
+                
                 #it's i+1 here, because the background has label 0
                 binary_bbox = np.where(labels[tuple(extent)] == i+1, 1, 0).astype(np.bool)
+                print("really computing now")
                 for plugin_name, feature_dict in feature_names.iteritems():
                     if not has_local_features[plugin_name]:
                         continue
