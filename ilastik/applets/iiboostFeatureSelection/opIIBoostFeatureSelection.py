@@ -77,6 +77,7 @@ class OpIIBoostFeatureSelection(Operator):
 
         # The "normal" pixel features are integrated.
         self.opIntegralImage = OpIntegralImage( parent=self )
+        self.opIntegralImage.name = "opIntegralImage"
         self.opIntegralImage.Input.connect( self.opFeatureSelection.OutputImage )
 
         self.opIntegralImage_from_cache = OpIntegralImage( parent=self )
@@ -154,7 +155,9 @@ class OpIIBoostFeatureSelection(Operator):
         num_channels = self.OutputImage.meta.shape[-1]
         dirty_start = tuple(roi.start[:-1]) + (num_channels,)
         dirty_stop = tuple(roi.stop[:-1]) + (num_channels,)
+
         self.OutputImage.setDirty(dirty_start, dirty_stop)
+        self.CachedOutputImage.setDirty(dirty_start, dirty_stop)
 
     def execute(self, slot, subindex, roi, result):
         assert slot == self.OutputImage or slot == self.CachedOutputImage
@@ -178,7 +181,7 @@ class OpIIBoostFeatureSelection(Operator):
             raw_req.wait()
         else:
             # Can't use writeInto because we need an implicit dtype cast here.
-            result[...,0:1] = raw_req.wait()            
+            result[...,0:1] = raw_req.wait()
         
         # Pull the rest of the channels from different sources, depending on cached/uncached slot.        
         if slot == self.OutputImage:
@@ -261,7 +264,6 @@ class OpHessianEigenvectors( Operator ):
         assert eigenvectors.shape[-2:] == (3,3)
 
         # Copy to output.
-        
         result[:] = eigenvectors[roiToSlice(*result_roi)][..., slice(roi.start[-1], roi.stop[-1])]
 
     def propagateDirty(self, slot, subindex, roi):
@@ -355,9 +357,11 @@ class OpIntegralImage(Operator):
     
     The integral image operation is equivalent to:
 
-    output = input_image.copy()
-    for i in range(a.ndim):
-        np.add.accumulate(output, axis=i, out=output)
+    def integral_image(input_image):
+        output = input_image.copy()
+        for i in range(input_image.ndim):
+            np.add.accumulate(output, axis=i, out=output)
+        return output
 
     (That is, simply integrate over all axes of the volume.)
     
